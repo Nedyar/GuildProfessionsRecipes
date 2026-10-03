@@ -61,7 +61,7 @@ local function IconOnEnter(button)
     local name = ns.ProfessionName(prof.sl, prof.lk)
     GameTooltip:SetText(prof.r and ("%s (%d)"):format(name, prof.r) or name, 1, 1, 1)
     if prof.native then
-        GameTooltip:AddLine(L["This member does not share recipes (Guild Recipes is not installed)."], 0.7, 0.7, 0.7, true)
+        GameTooltip:AddLine(L["This member does not share recipes (Guild Professions & Recipes is not installed)."], 0.7, 0.7, 0.7, true)
     else
         if prof.m and prof.m > 0 then
             GameTooltip:AddLine(L["Skill %d/%d"]:format(prof.r, prof.m), NORMAL_FONT_COLOR:GetRGB())
@@ -185,7 +185,7 @@ local function UpdateHeader(list)
         header:SetScript("OnEnter", function(self)
             GameTooltip:SetOwner(self, "ANCHOR_TOP")
             GameTooltip:SetText(L["Professions"], 1, 1, 1)
-            GameTooltip:AddLine(L["Shared by Guild Recipes. Point at an icon for the skill, click it for the recipes."], nil, nil, nil, true)
+            GameTooltip:AddLine(L["Shared by Guild Professions & Recipes. Point at an icon for the skill, click it for the recipes."], nil, nil, nil, true)
             GameTooltip:Show()
         end)
         header:SetScript("OnLeave", GameTooltip_Hide)

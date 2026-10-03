@@ -26,12 +26,12 @@ ns.RegisterLocale("koKR", function(L)
     L["language set to %s. Type /reload to update every window."] = "언어를 %s(으)로 설정했습니다. 모든 창을 갱신하려면 /reload를 입력하세요."
     L["this forgets what you know about your current guild. Type /grecipes reset confirm to do it."] = "현재 길드에 대해 알고 있는 정보를 지웁니다. 진행하려면 /grecipes reset confirm을 입력하세요."
     L["data of your current guild forgotten."] = "현재 길드의 데이터를 지웠습니다."
-    L["open these profession windows once so Guild Recipes can share your recipes with the guild: %s."] = "Guild Recipes가 길드와 제조법을 공유할 수 있도록 이 전문 기술 창들을 한 번씩 여세요: %s."
+    L["open these profession windows once so your recipes can be shared with the guild: %s."] = "제조법을 길드와 공유할 수 있도록 이 전문 기술 창들을 한 번씩 여세요: %s."
     L["running the probe; the report opens in a few seconds."] = "테스트 중입니다. 몇 초 후에 보고서가 열립니다."
 
     -- Sync
-    L["a guild member uses a newer version of Guild Recipes that this one cannot talk to. Please update."] = "어떤 길드원이 이 버전과 통신할 수 없는 새 버전의 Guild Recipes를 사용하고 있습니다. 애드온을 업데이트하세요."
-    L["a newer version of Guild Recipes (%s) is in use in your guild."] = "길드에서 새 버전의 Guild Recipes(%s)를 사용하고 있습니다."
+    L["a guild member uses a newer version of Guild Professions & Recipes that this one cannot talk to. Please update."] = "어떤 길드원이 이 버전과 통신할 수 없는 새 버전의 Guild Professions & Recipes를 사용하고 있습니다. 애드온을 업데이트하세요."
+    L["a newer version of Guild Professions & Recipes (%s) is in use in your guild."] = "길드에서 새 버전의 Guild Professions & Recipes(%s)를 사용하고 있습니다."
     L["sync finished: %d |4record:records; received from %s."] = "동기화 완료: 기록 %d개 받음 (보낸 사람: %s)."
     L["a sync is already running."] = "이미 동기화가 진행 중입니다."
     L["nobody online has data you are missing."] = "접속 중인 길드원 중 빠진 데이터를 가진 사람이 없습니다."
@@ -45,8 +45,8 @@ ns.RegisterLocale("koKR", function(L)
 
     -- Roster
     L["Professions"] = "전문 기술"
-    L["Shared by Guild Recipes. Point at an icon for the skill, click it for the recipes."] = "Guild Recipes로 공유된 정보입니다. 아이콘에 마우스를 올리면 기술 수준이, 클릭하면 제조법이 표시됩니다."
-    L["This member does not share recipes (Guild Recipes is not installed)."] = "이 길드원은 제조법을 공유하지 않습니다 (Guild Recipes가 설치되어 있지 않음)."
+    L["Shared by Guild Professions & Recipes. Point at an icon for the skill, click it for the recipes."] = "Guild Professions & Recipes로 공유된 정보입니다. 아이콘에 마우스를 올리면 기술 수준이, 클릭하면 제조법이 표시됩니다."
+    L["This member does not share recipes (Guild Professions & Recipes is not installed)."] = "이 길드원은 제조법을 공유하지 않습니다 (Guild Professions & Recipes가 설치되어 있지 않음)."
     L["Skill %d/%d"] = "기술 %d/%d"
     L["Click to see the recipes."] = "클릭하면 제조법을 봅니다."
     L["Recipes not shared yet: this member has to open the profession once."] = "아직 공유된 제조법 없음: 이 길드원이 전문 기술 창을 한 번 열어야 합니다."

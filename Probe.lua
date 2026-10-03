@@ -315,7 +315,7 @@ local window
 
 local function ShowReport(text)
     if not window then
-        window = CreateFrame("Frame", "GuildRecipesProbe", UIParent, "PortraitFrameTemplate")
+        window = CreateFrame("Frame", "GuildProfessionsRecipesProbe", UIParent, "PortraitFrameTemplate")
         window:SetSize(680, 500)
         window:SetPoint("CENTER")
         window:SetFrameStrata("DIALOG")
@@ -325,7 +325,7 @@ local function ShowReport(text)
         window:SetScript("OnDragStart", window.StartMoving)
         window:SetScript("OnDragStop", window.StopMovingOrSizing)
         window:SetPortraitToAsset("Interface\\Icons\\INV_Misc_Gear_01")
-        window:SetTitle("Guild Recipes - probe")
+        window:SetTitle("Guild Professions & Recipes - probe")
         tinsert(UISpecialFrames, window:GetName())
 
         local hint = window:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
@@ -358,7 +358,7 @@ end
 
 function Probe.Run(burst)
     lines = {}
-    Add("Guild Recipes probe, %s", date("%Y-%m-%d %H:%M:%S"))
+    Add("Guild Professions & Recipes probe, %s", date("%Y-%m-%d %H:%M:%S"))
     for _, section in ipairs({ ClientSection, SavedDataSection, GuildSection, ProfessionsSection, SessionSection, LookupSection, NativeGuildSection, EventsSection }) do
         local ok, err = pcall(section)
         if not ok then

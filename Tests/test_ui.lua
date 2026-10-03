@@ -144,7 +144,7 @@ if shown[1] then
     shown[1]._scripts.OnEnter(shown[1])
     shown[1]._scripts.OnClick(shown[1])
 end
-local viewer = A.env.GuildRecipesViewer
+local viewer = A.env.GuildProfessionsRecipesViewer
 H.check(viewer ~= nil and viewer._shown, "clicking an icon opens the recipe window")
 
 local bobHolder = HolderOf(bobRow)
@@ -271,27 +271,27 @@ viewer.Tabs[1]._scripts.OnClick(viewer.Tabs[1])
 H.check(#viewer.ScrollBox._provider.elements >= before, "a new recipe appears in the open window")
 
 -- Slash commands.
-A.env.SlashCmdList.GUILDRECIPES("status")
-A.env.SlashCmdList.GUILDRECIPES("help")
-A.env.SlashCmdList.GUILDRECIPES("language esES")
+A.env.SlashCmdList.GUILDPROFESSIONSRECIPES("status")
+A.env.SlashCmdList.GUILDPROFESSIONSRECIPES("help")
+A.env.SlashCmdList.GUILDPROFESSIONSRECIPES("language esES")
 H.eq(A.ns.L["Professions"], "Profesiones", "/grecipes language switches the texts")
-A.env.SlashCmdList.GUILDRECIPES("language dede")
+A.env.SlashCmdList.GUILDPROFESSIONSRECIPES("language dede")
 H.eq(A.ns.L["Professions"], "Berufe", "a language code in any case")
-H.eq(A.env.GuildRecipesDB.settings.locale, "deDE", "the language is remembered")
+H.eq(A.env.GuildProfessionsRecipesDB.settings.locale, "deDE", "the language is remembered")
 local printedBefore = #A.printed
-A.env.SlashCmdList.GUILDRECIPES("language")
+A.env.SlashCmdList.GUILDPROFESSIONSRECIPES("language")
 H.check((A.printed[#A.printed] or ""):find("zhTW", 1, true) ~= nil and #A.printed == printedBefore + 1, "without a code: the list of languages")
-A.env.SlashCmdList.GUILDRECIPES("language xxXX")
+A.env.SlashCmdList.GUILDPROFESSIONSRECIPES("language xxXX")
 H.eq(A.ns.LOCALE, "deDE", "an unknown code changes nothing")
-A.env.SlashCmdList.GUILDRECIPES("language auto")
+A.env.SlashCmdList.GUILDPROFESSIONSRECIPES("language auto")
 H.eq(A.ns.LOCALE, "enUS", "auto: back to the client's language")
-H.eq(A.env.GuildRecipesDB.settings.locale, nil, "auto is not remembered as a code")
-A.env.SlashCmdList.GUILDRECIPES("sync")
+H.eq(A.env.GuildProfessionsRecipesDB.settings.locale, nil, "auto is not remembered as a code")
+A.env.SlashCmdList.GUILDPROFESSIONSRECIPES("sync")
 world:RunFor(30)
-A.env.SlashCmdList.GUILDRECIPES("reset")
-A.env.SlashCmdList.GUILDRECIPES("reset confirm")
-H.check(A.env.GuildRecipesDB.guilds[GUILD].members[A.guid] ~= nil, "reset keeps our own record")
-H.eq(A.env.GuildRecipesDB.guilds[GUILD].members[B.guid], nil, "reset forgets the others")
+A.env.SlashCmdList.GUILDPROFESSIONSRECIPES("reset")
+A.env.SlashCmdList.GUILDPROFESSIONSRECIPES("reset confirm")
+H.check(A.env.GuildProfessionsRecipesDB.guilds[GUILD].members[A.guid] ~= nil, "reset keeps our own record")
+H.eq(A.env.GuildProfessionsRecipesDB.guilds[GUILD].members[B.guid], nil, "reset forgets the others")
 
 H.eq(#world.errors, 0, "UI: no Lua errors")
 for i = 1, math.min(#world.errors, 5) do
@@ -302,9 +302,9 @@ H.section("UI: probe report")
 A.env.GetBuildInfo = function()
     return "1.60.1", "70170", "Oct 1 2026", 16001
 end
-A.env.SlashCmdList.GUILDRECIPES("probe burst")
+A.env.SlashCmdList.GUILDPROFESSIONSRECIPES("probe burst")
 world:RunFor(5)
-local probe = A.env.GuildRecipesProbe
+local probe = A.env.GuildProfessionsRecipesProbe
 local report = probe and probe.Edit and probe.Edit._text or ""
 H.check(report:find("== Own professions", 1, true) ~= nil, "the probe report opens")
 H.check(report:find("section failed", 1, true) == nil, "every probe section runs")
@@ -330,8 +330,8 @@ do
     w:RunFor(2)
     w:CloseProfession(friend)
     w:RunFor(200)
-    named.env.SlashCmdList.GUILDRECIPES("bob jones")
-    local window = named.env.GuildRecipesViewer
+    named.env.SlashCmdList.GUILDPROFESSIONSRECIPES("bob jones")
+    local window = named.env.GuildProfessionsRecipesViewer
     H.check(window ~= nil and window._shown, "/grecipes with a name that has a space opens the window")
     H.check(window and (window.ScrollBox._provider.elements[2] or {}).recipeID == 10, "showing that member's recipes")
     H.eq(#w.errors, 0, "names with spaces: no Lua errors")

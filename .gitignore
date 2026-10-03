@@ -3,7 +3,7 @@
 # addon folder; these catch a copy that ends up here.
 WTF/
 SavedVariables/
-GuildRecipes.lua
+GuildProfessionsRecipes.lua
 *.lua.bak
 
 # Release packages

@@ -26,12 +26,12 @@ ns.RegisterLocale("zhCN", function(L)
     L["language set to %s. Type /reload to update every window."] = "语言已设为 %s。输入 /reload 以更新所有窗口。"
     L["this forgets what you know about your current guild. Type /grecipes reset confirm to do it."] = "这会清除你所掌握的当前公会的数据。输入 /grecipes reset confirm 以执行。"
     L["data of your current guild forgotten."] = "已清除当前公会的数据。"
-    L["open these profession windows once so Guild Recipes can share your recipes with the guild: %s."] = "请各打开一次这些专业窗口，以便 Guild Recipes 与公会分享你的配方：%s。"
+    L["open these profession windows once so your recipes can be shared with the guild: %s."] = "请各打开一次这些专业窗口，以便与公会分享你的配方：%s。"
     L["running the probe; the report opens in a few seconds."] = "正在运行测试，报告将在几秒后打开。"
 
     -- Sync
-    L["a guild member uses a newer version of Guild Recipes that this one cannot talk to. Please update."] = "有公会成员使用了更新版本的 Guild Recipes，当前版本无法与之通信。请更新插件。"
-    L["a newer version of Guild Recipes (%s) is in use in your guild."] = "你的公会中有人在使用更新版本的 Guild Recipes（%s）。"
+    L["a guild member uses a newer version of Guild Professions & Recipes that this one cannot talk to. Please update."] = "有公会成员使用了更新版本的 Guild Professions & Recipes，当前版本无法与之通信。请更新插件。"
+    L["a newer version of Guild Professions & Recipes (%s) is in use in your guild."] = "你的公会中有人在使用更新版本的 Guild Professions & Recipes（%s）。"
     L["sync finished: %d |4record:records; received from %s."] = "同步完成：收到 %d 条记录，来自 %s。"
     L["a sync is already running."] = "同步已在进行中。"
     L["nobody online has data you are missing."] = "在线的人中没有你缺少的数据。"
@@ -45,8 +45,8 @@ ns.RegisterLocale("zhCN", function(L)
 
     -- Roster
     L["Professions"] = "专业"
-    L["Shared by Guild Recipes. Point at an icon for the skill, click it for the recipes."] = "由 Guild Recipes 分享。鼠标指向图标查看技能等级，点击查看配方。"
-    L["This member does not share recipes (Guild Recipes is not installed)."] = "该成员未分享配方（未安装 Guild Recipes）。"
+    L["Shared by Guild Professions & Recipes. Point at an icon for the skill, click it for the recipes."] = "由 Guild Professions & Recipes 分享。鼠标指向图标查看技能等级，点击查看配方。"
+    L["This member does not share recipes (Guild Professions & Recipes is not installed)."] = "该成员未分享配方（未安装 Guild Professions & Recipes）。"
     L["Skill %d/%d"] = "技能 %d/%d"
     L["Click to see the recipes."] = "点击查看配方。"
     L["Recipes not shared yet: this member has to open the profession once."] = "尚未分享配方：该成员需要打开一次该专业。"

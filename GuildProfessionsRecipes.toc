@@ -1,5 +1,5 @@
 ## Interface: 16001
-## Title: Guild Recipes
+## Title: Guild Professions & Recipes
 ## Notes: Shows the professions and recipes of your guild members in the guild roster.
 ## Notes-deDE: Zeigt die Berufe und Rezepte deiner Gildenmitglieder in der Mitgliederliste der Gilde.
 ## Notes-esES: Muestra las profesiones y recetas de los miembros de tu hermandad en la lista de la hermandad.
@@ -12,8 +12,8 @@
 ## Notes-zhCN: 在公会名单中显示公会成员的专业和配方。
 ## Notes-zhTW: 在公會名冊中顯示公會成員的專業技能與配方。
 ## Author: Nedyar
-## Version: 0.4.0
-## SavedVariables: GuildRecipesDB
+## Version: 0.5.0
+## SavedVariables: GuildProfessionsRecipesDB
 ## IconTexture: Interface\Icons\INV_Scroll_03
 
 Locales\Locales.lua

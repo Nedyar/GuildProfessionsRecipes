@@ -363,7 +363,7 @@ local function ShowHints()
         end
     end
     if #names > 0 then
-        ns.Print(L["open these profession windows once so Guild Recipes can share your recipes with the guild: %s."], table.concat(names, ", "))
+        ns.Print(L["open these profession windows once so your recipes can be shared with the guild: %s."], table.concat(names, ", "))
     end
 end
 

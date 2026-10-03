@@ -26,12 +26,12 @@ ns.RegisterLocale("frFR", function(L)
     L["language set to %s. Type /reload to update every window."] = "langue définie sur %s. Tapez /reload pour mettre à jour toutes les fenêtres."
     L["this forgets what you know about your current guild. Type /grecipes reset confirm to do it."] = "ceci efface ce que vous savez de votre guilde actuelle. Tapez /grecipes reset confirm pour le faire."
     L["data of your current guild forgotten."] = "données de votre guilde actuelle effacées."
-    L["open these profession windows once so Guild Recipes can share your recipes with the guild: %s."] = "ouvrez une fois ces fenêtres de métier pour que Guild Recipes puisse partager vos recettes avec la guilde : %s."
+    L["open these profession windows once so your recipes can be shared with the guild: %s."] = "ouvrez une fois ces fenêtres de métier pour que vos recettes puissent être partagées avec la guilde : %s."
     L["running the probe; the report opens in a few seconds."] = "test en cours ; le rapport s'ouvre dans quelques secondes."
 
     -- Sync
-    L["a guild member uses a newer version of Guild Recipes that this one cannot talk to. Please update."] = "un membre de la guilde utilise une version plus récente de Guild Recipes avec laquelle celle-ci ne peut pas communiquer. Veuillez mettre à jour l'add-on."
-    L["a newer version of Guild Recipes (%s) is in use in your guild."] = "une version plus récente de Guild Recipes (%s) est utilisée dans votre guilde."
+    L["a guild member uses a newer version of Guild Professions & Recipes that this one cannot talk to. Please update."] = "un membre de la guilde utilise une version plus récente de Guild Professions & Recipes avec laquelle celle-ci ne peut pas communiquer. Veuillez mettre à jour l'add-on."
+    L["a newer version of Guild Professions & Recipes (%s) is in use in your guild."] = "une version plus récente de Guild Professions & Recipes (%s) est utilisée dans votre guilde."
     L["sync finished: %d |4record:records; received from %s."] = "synchronisation terminée : %d |4fiche reçue:fiches reçues; de %s."
     L["a sync is already running."] = "une synchronisation est déjà en cours."
     L["nobody online has data you are missing."] = "personne en ligne n'a de données qui vous manquent."
@@ -45,8 +45,8 @@ ns.RegisterLocale("frFR", function(L)
 
     -- Roster
     L["Professions"] = "Métiers"
-    L["Shared by Guild Recipes. Point at an icon for the skill, click it for the recipes."] = "Partagés par Guild Recipes. Survolez une icône pour voir le niveau et cliquez dessus pour voir les recettes."
-    L["This member does not share recipes (Guild Recipes is not installed)."] = "Ce membre ne partage pas de recettes (Guild Recipes n'est pas installé)."
+    L["Shared by Guild Professions & Recipes. Point at an icon for the skill, click it for the recipes."] = "Partagés par Guild Professions & Recipes. Survolez une icône pour voir le niveau et cliquez dessus pour voir les recettes."
+    L["This member does not share recipes (Guild Professions & Recipes is not installed)."] = "Ce membre ne partage pas de recettes (Guild Professions & Recipes n'est pas installé)."
     L["Skill %d/%d"] = "Compétence %d/%d"
     L["Click to see the recipes."] = "Cliquez pour voir les recettes."
     L["Recipes not shared yet: this member has to open the profession once."] = "Recettes pas encore partagées : ce membre doit ouvrir le métier une fois."

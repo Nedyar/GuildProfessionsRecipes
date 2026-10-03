@@ -224,7 +224,7 @@ alt.saved.settings.locale = "esES"
 alt.saved.guilds["Other Guild"] = { seen = now, members = {} }
 w2:Login(alt)
 H.eq(alt.ns.loadInfo.native, true, "saved data loaded")
-H.check(alt.env.GuildRecipesDB.guilds["Other Guild"] ~= nil, "saved guilds kept")
+H.check(alt.env.GuildProfessionsRecipesDB.guilds["Other Guild"] ~= nil, "saved guilds kept")
 H.eq(alt.ns.LOCALE, "esES", "saved language applied")
 H.eq(alt.ns.L["Professions"], "Profesiones", "texts follow the saved language")
 H.section("Loader: packed recipe lists")
@@ -246,7 +246,7 @@ H.eq(type(savedList), "string", "recipe lists are saved packed")
 H.check(#savedList < #big * 3, "packed list is small (" .. #savedList .. " bytes for " .. #big .. " recipes)")
 w4:Login(packer)
 w4:RunFor(2)
-local reloaded = packer.env.GuildRecipesDB.guilds[GUILD].members[packer.guid].p[171].k
+local reloaded = packer.env.GuildProfessionsRecipesDB.guilds[GUILD].members[packer.guid].p[171].k
 H.check(H.SameList(reloaded, big), "packed list read back on login")
 local damaged = Data.Sanitize({ schema = 2, guilds = { [GUILD] = { members = { [X] = { t = now, p = { [171] = { r = 1, m = 1, k = "@@@@" } } } } } } })
 H.eq(damaged.guilds[GUILD].members[X], nil, "a damaged packed list drops the record")
@@ -268,7 +268,7 @@ H.check(ns.Ago(ns.Now() - 75):find("^1 Minute") ~= nil, "75 s: 1 minute")
 
 H.section("TOC")
 -- The game reports an error for every listed file that does not exist.
-local toc = assert(io.open(H.ADDON .. "/GuildRecipes.toc", "r"))
+local toc = assert(io.open(H.ADDON .. "/GuildProfessionsRecipes.toc", "r"))
 local listed, missing = 0, 0
 for line in toc:lines() do
     line = line:gsub("\r$", "")

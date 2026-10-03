@@ -1,10 +1,10 @@
--- Guild Recipes: shows the professions and recipes of every guild member.
+-- Guild Professions & Recipes: shows the professions and recipes of every guild member.
 -- Core.lua holds the shared helpers, the startup and the slash commands.
 local ADDON_NAME, ns = ...
 local L = ns.L
 
 ns.VERSION = C_AddOns.GetAddOnMetadata(ADDON_NAME, "Version") or "0.0.0"
-ns.PREFIX = "GuildRecipes"
+ns.PREFIX = "GuildProfRecipes"
 
 -- "1.2.3" -> 10203. Records carry it so a newer client in the guild is noticed.
 function ns.VersionNumber(version)
@@ -49,7 +49,7 @@ function ns.Print(message, ...)
     if select("#", ...) > 0 then
         message = message:format(...)
     end
-    print("|cff33ccffGuild Recipes|r: " .. message)
+    print("|cff33ccffGuild Professions & Recipes|r: " .. message)
 end
 
 -- RegisterEvent raises for an event this client does not have, which would
@@ -302,9 +302,9 @@ local function PrintStatus()
     ns.Print(L["sync: %s"], ns.Sync.Describe())
 end
 
-SLASH_GUILDRECIPES1 = "/grecipes"
-SLASH_GUILDRECIPES2 = "/guildrecipes"
-SlashCmdList.GUILDRECIPES = function(message)
+SLASH_GUILDPROFESSIONSRECIPES1 = "/grecipes"
+SLASH_GUILDPROFESSIONSRECIPES2 = "/gprecipes"
+SlashCmdList.GUILDPROFESSIONSRECIPES = function(message)
     message = strtrim(message or "")
     local command, rest = message:match("^(%S*)%s*(.-)$")
     local lower = command:lower()

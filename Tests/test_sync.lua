@@ -27,7 +27,7 @@ local function Take(list, count)
 end
 
 local function RecordOf(viewer, owner)
-    local db = viewer.env.GuildRecipesDB
+    local db = viewer.env.GuildProfessionsRecipesDB
     local guild = db and db.guilds[GUILD]
     return guild and guild.members[owner.guid]
 end
@@ -447,7 +447,7 @@ do
     end
     local newKey = "Renamed Guild"
     local function RecordIn(viewer, owner)
-        local guild = viewer.env.GuildRecipesDB.guilds[newKey]
+        local guild = viewer.env.GuildProfessionsRecipesDB.guilds[newKey]
         return guild and guild.members[owner.guid]
     end
     local ok = w:RunUntil(function()

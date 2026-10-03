@@ -1,4 +1,4 @@
-# Guild Recipes
+# Guild Professions & Recipes
 
 An addon for WoW Forever (the `_classic_beta_` client, 1.60.x) that shows the
 professions and recipes of every member of your guild.
@@ -28,7 +28,7 @@ professions and recipes of every member of your guild.
 
 ## Installing
 
-1. Copy the `GuildRecipes` folder into
+1. Copy the `GuildProfessionsRecipes` folder into
    `World of Warcraft\_classic_beta_\Interface\AddOns\`.
 2. Log in and open each of your profession windows once, so the addon can
    read the recipes. Once any character of your account has opened a
@@ -95,7 +95,7 @@ a guild roster and a fake server that delivers addon messages between many
 clients, with the server's send limits. They need a Lua 5.1 interpreter:
 
 ```
-lua5.1 Tests\run.lua <path to GuildRecipes> <path to GuildRecipes\Tests> [unit] [sync] [ui]
+lua5.1 Tests\run.lua <path to GuildProfessionsRecipes> <path to GuildProfessionsRecipes\Tests> [unit] [sync] [ui]
 ```
 
 - `unit`: the binary format, Base64, checks and merge rules, loading and

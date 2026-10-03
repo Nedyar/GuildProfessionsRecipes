@@ -509,7 +509,7 @@ local function OpenLive()
 end
 
 local function CreateWindow()
-    frame = CreateFrame("Frame", "GuildRecipesViewer", UIParent, "PortraitFrameTemplate")
+    frame = CreateFrame("Frame", "GuildProfessionsRecipesViewer", UIParent, "PortraitFrameTemplate")
     frame:SetSize(WIDTH, HEIGHT)
     frame:SetFrameStrata("HIGH")
     frame:SetToplevel(true)

@@ -1,4 +1,4 @@
--- Test harness for Guild Recipes: a fake world with a virtual clock, a guild
+-- Test harness for Guild Professions & Recipes: a fake world with a virtual clock, a guild
 -- roster and a server that delivers addon messages between clients. Each
 -- client loads the real addon files into its own environment.
 local H = {}
@@ -421,7 +421,7 @@ function World:LoadFile(client, path)
         return
     end
     setfenv(chunk, client.env)
-    self:Protect(client.name .. " load " .. path, chunk, "GuildRecipes", client.ns)
+    self:Protect(client.name .. " load " .. path, chunk, "GuildProfessionsRecipes", client.ns)
 end
 
 -- The client's saved file (client.saved) loads after the addon's files,
@@ -435,17 +435,17 @@ function World:Login(client, options)
         self:LoadFile(client, path)
     end
     if client.saved and not options.brokenSavedVariables then
-        client.env.GuildRecipesDB = H.DeepCopy(client.saved)
+        client.env.GuildProfessionsRecipesDB = H.DeepCopy(client.saved)
     end
     client.loggedIn = true
-    self:FireEvent(client, "ADDON_LOADED", "GuildRecipes")
+    self:FireEvent(client, "ADDON_LOADED", "GuildProfessionsRecipes")
     self:FireEvent(client, "PLAYER_LOGIN")
     self:RosterChanged(client)
 end
 
 function World:Logout(client)
     self:FireEvent(client, "PLAYER_LOGOUT")
-    client.saved = H.DeepCopy(client.env.GuildRecipesDB)
+    client.saved = H.DeepCopy(client.env.GuildProfessionsRecipesDB)
     client.loggedIn = false
     for _, timer in ipairs(self.timers) do
         if timer.owner == client then

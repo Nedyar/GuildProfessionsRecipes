@@ -63,7 +63,7 @@ end
 local function NoteVersion(version)
     if not newerVersionNoticed and type(version) == "number" and version > ns.VERSION_NUM and version < 1000000 then
         newerVersionNoticed = true
-        ns.Print(L["a newer version of Guild Recipes (%s) is in use in your guild."], ns.VersionString(version))
+        ns.Print(L["a newer version of Guild Professions & Recipes (%s) is in use in your guild."], ns.VersionString(version))
     end
 end
 

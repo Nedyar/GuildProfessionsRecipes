@@ -375,7 +375,7 @@ local function OnChunk(text, channel, sender)
     if protocol ~= PROTOCOL then
         if not newerProtocolNoticed and protocol > PROTOCOL then
             newerProtocolNoticed = true
-            ns.Print(ns.L["a guild member uses a newer version of Guild Recipes that this one cannot talk to. Please update."])
+            ns.Print(ns.L["a guild member uses a newer version of Guild Professions & Recipes that this one cannot talk to. Please update."])
         end
         return
     end

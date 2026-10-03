@@ -1,7 +1,7 @@
 -- Data.lua: the saved database and the rules that merge what different
 -- clients know into one view.
 --
--- GuildRecipesDB = {
+-- GuildProfessionsRecipesDB = {
 --   schema = 2,
 --   guilds = { ["Guild Name"] = { seen = time, members = {
 --       ["Player-1234-0ABCDEF0"] = record (see Pack.lua; on disk its recipe
@@ -354,10 +354,10 @@ end
 
 -- Runs at ADDON_LOADED, once the client has loaded the saved variables.
 function Data.Load()
-    local native = GuildRecipesDB
+    local native = GuildProfessionsRecipesDB
     ns.loadInfo = { native = type(native) == "table" }
     local db = Data.Sanitize(native)
-    GuildRecipesDB = db
+    GuildProfessionsRecipesDB = db
     ns.db = db
 end
 
