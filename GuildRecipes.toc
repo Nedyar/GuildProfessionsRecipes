@@ -1,0 +1,40 @@
+## Interface: 16001
+## Title: Guild Recipes
+## Notes: Shows the professions and recipes of your guild members in the guild roster.
+## Notes-deDE: Zeigt die Berufe und Rezepte deiner Gildenmitglieder in der Mitgliederliste der Gilde.
+## Notes-esES: Muestra las profesiones y recetas de los miembros de tu hermandad en la lista de la hermandad.
+## Notes-esMX: Muestra las profesiones y recetas de los miembros de tu hermandad en la lista de la hermandad.
+## Notes-frFR: Affiche les métiers et les recettes des membres de votre guilde dans la liste des membres.
+## Notes-itIT: Mostra le professioni e le ricette dei membri della tua gilda nell'elenco dei membri.
+## Notes-koKR: 길드 명단에서 길드원들의 전문 기술과 제조법을 보여줍니다.
+## Notes-ptBR: Mostra as profissões e receitas dos membros da sua guilda na lista da guilda.
+## Notes-ruRU: Показывает профессии и рецепты членов вашей гильдии в списке гильдии.
+## Notes-zhCN: 在公会名单中显示公会成员的专业和配方。
+## Notes-zhTW: 在公會名冊中顯示公會成員的專業技能與配方。
+## Author: Nedyar
+## Version: 0.4.0
+## SavedVariables: GuildRecipesDB
+## IconTexture: Interface\Icons\INV_Scroll_03
+
+Locales\Locales.lua
+Locales\deDE.lua
+Locales\esES.lua
+Locales\esMX.lua
+Locales\frFR.lua
+Locales\itIT.lua
+Locales\koKR.lua
+Locales\ptBR.lua
+Locales\ruRU.lua
+Locales\zhCN.lua
+Locales\zhTW.lua
+
+Core.lua
+Pack.lua
+Data.lua
+Comm.lua
+Roster.lua
+Scanner.lua
+Sync.lua
+RosterColumn.lua
+Viewer.lua
+Probe.lua
