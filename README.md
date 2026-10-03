@@ -1,3 +1,5 @@
+<p align="center"><img src=".github/logo.png" alt="Guild Professions & Recipes logo" width="160"></p>
+
 # Guild Professions & Recipes
 
 An addon for WoW Forever (the `_classic_beta_` client, 1.60.x) that shows the
@@ -87,6 +89,7 @@ every client turns them into names in its own language.
 | `Viewer.lua` | The recipe window |
 | `Probe.lua` | `/grecipes probe` |
 | `Tests\` | Offline tests (not loaded by the game) |
+| `.github\logo.png` | The project logo (not part of the addon) |
 
 ## Tests
 
