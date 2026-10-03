@@ -90,6 +90,8 @@ every client turns them into names in its own language.
 | `Probe.lua` | `/grecipes probe` |
 | `Tests\` | Offline tests (not loaded by the game) |
 | `.github\logo.png` | The project logo (not part of the addon) |
+| `CHANGELOG.md` | Release notes, shown on CurseForge for each file |
+| `.pkgmeta` | How CurseForge packages a release |
 
 ## Tests
 
@@ -110,6 +112,18 @@ lua5.1 Tests\run.lua <path to GuildProfessionsRecipes> <path to GuildProfessions
   realms, senders without a realm and whispers by name only.
 - `ui`: the roster column and the recipe window on stand-ins for
   Blizzard's frames, the slash commands and the probe.
+
+## Releasing
+
+CurseForge packages every tagged commit pushed to this repository.
+
+1. Raise `## Version` in `GuildProfessionsRecipes.toc` and add that version's
+   entry at the top of `CHANGELOG.md`. The tests check that both match.
+2. Commit, tag the commit `v<version>` and push the tag:
+   `git push origin v<version>`. A tag containing `beta` or `alpha` makes a
+   beta or alpha file instead of a release.
+3. CurseForge builds the zip as `.pkgmeta` says: the `GuildProfessionsRecipes`
+   folder without the tests, with `CHANGELOG.md` as the file's changelog.
 
 ## License
 

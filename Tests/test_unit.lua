@@ -292,6 +292,24 @@ for _, path in ipairs(H.FILES) do
 end
 H.check(loaded["Core.lua"] and loaded["Probe.lua"], "the tests load the addon's files")
 
+H.section("Release files")
+local function ReadFile(name)
+    local file = io.open(H.ADDON .. "/" .. name, "r")
+    if not file then
+        return ""
+    end
+    local text = file:read("*a")
+    file:close()
+    return text
+end
+-- The newest changelog entry is the version in the TOC.
+local tocVersion = ReadFile("GuildProfessionsRecipes.toc"):match("## Version: ([%d%.]+)")
+local logVersion = ReadFile("CHANGELOG.md"):match("\n## ([%d%.]+)")
+H.check(tocVersion ~= nil, "the TOC has a version")
+H.eq(logVersion, tocVersion, "the changelog's newest entry matches the TOC version")
+-- The packager names the folder after package-as; the game needs it to match the TOC.
+H.eq(ReadFile(".pkgmeta"):match("package%-as: (%S+)"), "GuildProfessionsRecipes", "packaged under the TOC's folder name")
+
 H.section("Locales")
 local w3 = H.NewWorld({ seed = 6 })
 local mx = w3:NewClient("Mex", { locale = "esMX" })
