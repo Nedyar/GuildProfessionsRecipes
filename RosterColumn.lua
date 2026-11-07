@@ -68,9 +68,11 @@ local function IconOnEnter(button)
         end
         if type(prof.k) == "table" then
             GameTooltip:AddLine(L["%d |4recipe:recipes;"]:format(#prof.k), 1, 1, 1)
-            GameTooltip:AddLine(L["Click to see the recipes."], GREEN_FONT_COLOR:GetRGB())
         elseif prof.k == nil then
             GameTooltip:AddLine(L["Recipes not shared yet: this member has to open the profession once."], 0.7, 0.7, 0.7, true)
+        end
+        if type(prof.k) == "table" or ns.Viewer.OpensInGame(button.key, prof.sl) then
+            GameTooltip:AddLine(L["Click to see the recipes."], GREEN_FONT_COLOR:GetRGB())
         end
         if button.record then
             GameTooltip:AddLine(L["Updated %s ago"]:format(ns.Ago(button.record.t)), 0.6, 0.6, 0.6)
@@ -79,9 +81,11 @@ local function IconOnEnter(button)
     GameTooltip:Show()
 end
 
+-- Ours in the game's own window, a member's from the saved recipes.
 local function IconOnClick(button)
-    if type(button.prof.k) == "table" and button.key then
-        ns.Viewer.OpenMember(button.key, button.prof.sl)
+    local prof = button.prof
+    if button.key and not prof.native and (type(prof.k) == "table" or ns.Viewer.OpensInGame(button.key, prof.sl)) then
+        ns.Viewer.ShowProfession(button.key, prof.sl)
     end
 end
 

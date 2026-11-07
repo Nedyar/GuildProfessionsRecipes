@@ -2,18 +2,38 @@
 
 # Guild Professions & Recipes
 
-An addon for WoW Forever (the `_classic_beta_` client, 1.60.x) that shows the
+An addon for WoW Forever (the `_forever_` client, 1.60.x) that shows the
 professions and recipes of every member of your guild.
 
 - **Roster column.** The guild window's Roster tab gets a Professions column
   with one icon per profession. Pointing at an icon shows the profession and
-  skill, for example `Mining (200)`; clicking it opens that member's recipes.
-  Faded icons have nothing to open: members without the addon, or recipes
-  not shared yet. While the roster shows one of Blizzard's extra columns
-  (achievement points...), the icons take the Note column's place.
-- **Recipe window.** It lists the member's recipes by category, with search,
-  reagents and the item each recipe makes. It is built from saved data, so it
-  works while the member is offline. Shift-click a recipe to link it in chat.
+  skill, for example `Mining (200)`. Clicking it opens that member's saved
+  recipes; clicking one of your own professions opens it in the game's own
+  profession window. Faded icons have nothing saved to open: members without
+  the addon, or recipes not shared yet. While the roster shows one of
+  Blizzard's extra columns (achievement points...), the icons take the Note
+  column's place.
+- **Recipe window.** The saved recipes, in a copy of the game's own
+  profession window: recipes by category with search (by recipe, item made
+  or reagent, as in the game), the item each one
+  makes, its reagents (with how many you carry) and who else in the guild
+  knows it. It works while the member is offline, and says that the data is
+  saved and how old it is. Shift-click a recipe to link it in chat. Where
+  the game has its crafting controls there is a **Request an order** button,
+  not active yet: crafting orders between members come in a later version.
+- **Guild window tab.** The guild window gets a **Recipes & Orders** tab
+  under Blizzard's own tabs. It is disabled until a later version, which
+  will add a search over the whole guild's recipes and the orders.
+- **Filters.** The window's Filter menu has two of the game's own entries:
+  - **Have Materials** keeps the recipes whose reagents you carry in your
+    bags, the same counts the reagents show.
+  - **Slots** filters by where the item is worn, with the game's
+    **Created Items** entry for items that are not worn (leather, kits,
+    potions...). Recipes that make no item, such as enchantments, always
+    stay. Like the game's, gathering professions (Mining, Herbalism,
+    Skinning, Fishing) have no Slots entry.
+
+  The red button next to Filter clears them all.
 - **Automatic sharing.** Each client reads its own character's professions
   and shares them with the guild through hidden addon messages, which never
   appear in any chat window. When you log in, a guild member who is online
@@ -31,7 +51,7 @@ professions and recipes of every member of your guild.
 ## Installing
 
 1. Copy the `GuildProfessionsRecipes` folder into
-   `World of Warcraft\_classic_beta_\Interface\AddOns\`.
+   `World of Warcraft\_forever_\Interface\AddOns\`.
 2. Log in and open each of your profession windows once, so the addon can
    read the recipes. Once any character of your account has opened a
    profession's window, its full recipe list is known, and your other
@@ -49,7 +69,7 @@ game provides no reliable skill level for them), but no recipes.
 | `/grecipes <name>` | A guild member's recipes |
 | `/grecipes status` | What the addon knows and is doing |
 | `/grecipes sync` | Ask the guild for missing data now |
-| `/grecipes probe` | A test report for the addon's author (`/grecipes probe burst` also tests the send limit) |
+| `/grecipes probe` | A test report for the addon's author (`/grecipes probe burst` also tests the send limit; `/grecipes probe ui`, with a profession window open, reports where each piece of the game's window sits) |
 | `/grecipes language <code>\|auto` | The language of the addon's own texts (enUS, deDE, esES, esMX, frFR, itIT, koKR, ptBR, ruRU, zhCN or zhTW); with no code, the list |
 | `/grecipes debug` | Show the sync log in the chat |
 | `/grecipes reset` | Forget the data of your current guild |
@@ -86,6 +106,7 @@ every client turns them into names in its own language.
 | `Scanner.lua` | Reading your own professions and recipes |
 | `Sync.lua` | Announcements and the login sync |
 | `RosterColumn.lua` | The Professions column in the Roster tab |
+| `GuildTab.lua` | The Recipes & Orders tab on the guild window |
 | `Viewer.lua` | The recipe window |
 | `Probe.lua` | `/grecipes probe` |
 | `Tests\` | Offline tests (not loaded by the game) |
@@ -110,8 +131,8 @@ lua5.1 Tests\run.lua <path to GuildProfessionsRecipes> <path to GuildProfessions
   throttled whispers, a responder leaving mid-sync, a 40-member guild, a fresh
   install, and WoW Forever's ways: names with spaces, members on several
   realms, senders without a realm and whispers by name only.
-- `ui`: the roster column and the recipe window on stand-ins for
-  Blizzard's frames, the slash commands and the probe.
+- `ui`: the roster column, the guild window tab and the recipe window on
+  stand-ins for Blizzard's frames, the slash commands and the probe.
 
 ## Releasing
 

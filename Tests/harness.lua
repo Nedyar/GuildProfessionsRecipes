@@ -8,7 +8,7 @@ H.FILES = {
     "Locales/Locales.lua", "Locales/deDE.lua", "Locales/esES.lua", "Locales/esMX.lua", "Locales/frFR.lua",
     "Locales/itIT.lua", "Locales/koKR.lua", "Locales/ptBR.lua", "Locales/ruRU.lua", "Locales/zhCN.lua", "Locales/zhTW.lua",
     "Core.lua", "Pack.lua", "Data.lua", "Comm.lua", "Roster.lua", "Scanner.lua",
-    "Sync.lua", "RosterColumn.lua", "Viewer.lua", "Probe.lua",
+    "Sync.lua", "RosterColumn.lua", "GuildTab.lua", "Viewer.lua", "Probe.lua",
 }
 
 -- Assertions ------------------------------------------------------------------
@@ -130,6 +130,10 @@ function H.NewWorld(options)
         strictWhispers = options.strictWhispers,
         systemShown = {},
         recipeSkill = {},
+        itemSlots = {},  -- [itemID] = "INVTYPE_..."
+        reagents = {},   -- [recipeID] = { { itemID, quantity }... } (else 2 x item 2447)
+        noItem = {},     -- [recipeID] = true when it makes no item (an enchantment)
+        unloaded = {},   -- [itemID] = true while the client has not loaded the item
         log = {},
         stats = { sent = 0, guild = 0, whisper = 0, throttled = 0, types = {} },
     }, World)
@@ -240,9 +244,17 @@ for name in ([[AddLine ClearAllPoints EnableMouse HighlightText RegisterForClick
     SetMotionScriptsWhileDisabled SetMovable SetMultiLine SetOwner SetPoint SetPortraitToAsset SetScrollChild
     SetSize SetSpacing SetSpellByID SetStatusBarColor SetStatusBarTexture SetTexCoord SetTexture SetTitle
     SetToplevel SetValue SetWidth SetWordWrap StartMoving StopMovingOrSizing SetMaxLetters SetMaxBytes
-    SetDataProvider SetElementInitializer]]):gmatch("%a+") do
+    SetDataProvider SetElementInitializer SetElementExtentCalculator SetFrameLevel AddMaskTexture SetAtlas
+    SetBlendMode SetTextColor SetVertexColor IsTruncated SetFillToInterior SetChecked]]):gmatch("%a+") do
     H.NoOpMethods[name] = true
 end
+
+-- Regions that Blizzard's templates give a frame, by template.
+H.TemplateRegions = {
+    CircularGiantItemButtonTemplate = { Icon = "Texture", IconBorder = "Texture", Count = "FontString" },
+    LargeSideTabButtonTemplate = { Background = "Texture", Icon = "Texture", SelectedTexture = "Texture" },
+    RightSideTabTemplate = { Icon = "Texture", IconOverlay = "Texture" },
+}
 
 H.FrameMethods = {
     RegisterEvent = function(self, event)
@@ -308,7 +320,63 @@ H.FrameMethods = {
     GetTextWidth = function(self)
         return 6 * #(self._text or "")
     end,
+    GetFrameLevel = function()
+        return 1
+    end,
+    -- The last anchor set, and the enabled state, for the tests to check.
+    SetPoint = function(self, ...)
+        self._point = { ... }
+    end,
+    SetEnabled = function(self, enabled)
+        self._enabled = enabled and true or false
+    end,
+    CreateMaskTexture = function(self)
+        return NewObject(self._client, "MaskTexture")
+    end,
+    -- Blizzard's filter dropdown (DropdownButtonMixin, WowDropdownFilterBehaviorMixin).
+    -- Like the game's, SetupMenu builds the menu right away.
+    SetupMenu = function(self, generator)
+        self._menuGenerator = generator
+        generator(self, H.NewMenuDescription())
+    end,
+    SetDefaultCallback = function(self, callback)
+        self._default = callback
+    end,
+    SetIsDefaultCallback = function(self, callback)
+        self._isDefault = callback
+    end,
+    ValidateResetState = function(self)
+        self._resetShown = not self._isDefault()
+    end,
 }
+
+-- A menu description that records its entries: checkboxes, and buttons
+-- with their submenu entries in .entries.
+function H.NewMenuDescription()
+    local description = { entries = {} }
+    function description:CreateCheckbox(text, isSelected, setSelected, data)
+        local entry = { kind = "checkbox", text = text, isSelected = isSelected, setSelected = setSelected, data = data }
+        function entry:SetTitleAndTextTooltip(title, tooltip)
+            self.tooltip = tooltip
+        end
+        self.entries[#self.entries + 1] = entry
+        return entry
+    end
+    function description:CreateButton(text, callback, data)
+        local entry = H.NewMenuDescription()
+        entry.kind, entry.text, entry.callback, entry.data = "button", text, callback, data
+        self.entries[#self.entries + 1] = entry
+        return entry
+    end
+    return description
+end
+
+-- The entries of a dropdown's menu, as the game builds it when it opens.
+function H.MenuOf(dropdown)
+    local root = H.NewMenuDescription()
+    dropdown._menuGenerator(dropdown, root)
+    return root.entries
+end
 
 -- Clients -------------------------------------------------------------------------
 
@@ -661,10 +729,14 @@ function World:MakeEnv(client)
             return handle
         end,
     }
-    api.CreateFrame = function(objectType, name, parent)
+    api.CreateFrame = function(objectType, name, parent, template)
         local frame = NewObject(client, objectType)
         frame._name = name
         frame._parent = parent
+        frame._template = template
+        for key, kind in pairs(H.TemplateRegions[template] or {}) do
+            rawset(frame, key, NewObject(client, kind))
+        end
         client.created = client.created or {}
         client.created[#client.created + 1] = frame
         if name then
@@ -686,6 +758,8 @@ function World:MakeEnv(client)
         SpellBookSpellBank = { Player = 0, Pet = 1 },
         ClubType = { BattleNet = 0, Character = 1, Guild = 2, Other = 3 },
         CraftingReagentType = { Modifying = 0, Basic = 1 },
+        Profession = { FirstAid = 0, Blacksmithing = 1, Leatherworking = 2, Alchemy = 3, Herbalism = 4, Cooking = 5, Mining = 6,
+            Tailoring = 7, Engineering = 8, Enchanting = 9, Fishing = 10, Skinning = 11 },
     }
     api.C_ChatInfo = {
         RegisterAddonMessagePrefix = function()
@@ -841,7 +915,8 @@ function World:MakeEnv(client)
             return client.session and (client.session.filtered or client.session.all) or {}
         end,
         GetRecipeInfo = function(id)
-            return { name = "Recipe " .. id, learned = client.session ~= nil and client.session.learned[id] == true, categoryID = 5, isDummyRecipe = false }
+            -- Away from a profession window the game gives category 0.
+            return { name = "Recipe " .. id, learned = client.session ~= nil and client.session.learned[id] == true, categoryID = client.session and 5 or 0, isDummyRecipe = false }
         end,
         GetCategoryInfo = function()
             return { name = "Category", uiOrder = 1 }
@@ -857,6 +932,11 @@ function World:MakeEnv(client)
         end,
         GetTradeSkillTexture = function()
             return 1
+        end,
+        -- Which profession a skill line is (Enum.Profession), for the real IDs.
+        GetProfessionInfoBySkillLineID = function(skillLine)
+            local kinds = { [164] = 1, [165] = 2, [171] = 3, [182] = 4, [185] = 5, [186] = 6, [197] = 7, [202] = 8, [333] = 9, [356] = 10, [393] = 11 }
+            return { profession = kinds[skillLine] }
         end,
         IsGuildTradeSkillsEnabled = function()
             return false
@@ -881,7 +961,15 @@ function World:MakeEnv(client)
         GetItemQualityByID = function()
             return 1
         end,
-        RequestLoadItemDataByID = function() end,
+        -- An unloaded item arrives a moment later, with its event.
+        RequestLoadItemDataByID = function(itemID)
+            if world.unloaded[itemID] then
+                world:Schedule(0.5, function()
+                    world.unloaded[itemID] = nil
+                    world:FireEvent(client, "ITEM_DATA_LOAD_RESULT", itemID, true)
+                end, client)
+            end
+        end,
     }
     api.Ambiguate = function(name)
         return (name:gsub("%-[^%-]+$", ""))
@@ -979,22 +1067,51 @@ function World:MakeEnv(client)
     api.RETRIEVING_ITEM_INFO = "Retrieving item information"
     api.NORMAL_FONT_COLOR = { GetRGB = function() return 1, 0.82, 0 end }
     api.GREEN_FONT_COLOR = { GetRGB = function() return 0, 1, 0 end }
-    api.C_Item.GetItemInfoInstant = function(itemID)
-        return itemID, "Trade Goods", "Elixir", "", 1, 7, 2
+    api.C_Texture = {
+        GetAtlasInfo = function()
+            return { width = 128, height = 1020, file = 5, leftTexCoord = 0, rightTexCoord = 1, topTexCoord = 0, bottomTexCoord = 1 }
+        end,
+    }
+    -- The game's link handling, to check that nothing asks for links.
+    client.itemRefs = {}
+    api.SetItemRef = function(link)
+        client.itemRefs[#client.itemRefs + 1] = link
     end
+    api.C_Item.GetItemCount = function(itemID)
+        return client.bags and client.bags[itemID] or 0
+    end
+    api.C_TradeSkillUI.GetRecipeDescription = function(recipeID)
+        return "Makes the item of recipe " .. recipeID .. "."
+    end
+    api.C_TradeSkillUI.GetRecipeRequirements = function()
+        return {}
+    end
+    api.C_Item.GetItemInfoInstant = function(itemID)
+        return itemID, "Trade Goods", "Elixir", world.itemSlots[itemID] or "", 1, 7, 2
+    end
+    api._G = env
+    api.INVTYPE_CHEST, api.INVTYPE_ROBE, api.INVTYPE_FEET, api.INVTYPE_HEAD = "Chest", "Chest", "Feet", "Head"
+    api.MenuResponse = { Open = 1, Refresh = 2, Close = 3, CloseAll = 4 }
     api.C_Item.GetItemQualityColor = function()
         return 1, 1, 1, "ffffffff"
     end
     api.C_Item.GetItemNameByID = function(itemID)
+        if world.unloaded[itemID] then
+            return nil
+        end
         return "Item" .. itemID
     end
     api.C_Item.GetItemInfo = function(itemID)
         return "Item" .. itemID, "|cffffffff|Hitem:" .. itemID .. "|h[Item]|h|r"
     end
     api.C_TradeSkillUI.GetRecipeSchematic = function(recipeID)
+        local slots = {}
+        for i, reagent in ipairs(world.reagents[recipeID] or { { 2447, 2 } }) do
+            slots[i] = { reagents = { { itemID = reagent[1] } }, quantityRequired = reagent[2], reagentType = 1 }
+        end
         return {
-            name = "Recipe " .. recipeID, icon = 4, outputItemID = recipeID + 100000, quantityMin = 1, quantityMax = recipeID % 2 + 1,
-            reagentSlotSchematics = { { reagents = { { itemID = 2447 } }, quantityRequired = 2, reagentType = 1 } },
+            name = "Recipe " .. recipeID, icon = 4, outputItemID = world.noItem[recipeID] and 0 or recipeID + 100000, quantityMin = 1, quantityMax = recipeID % 2 + 1,
+            reagentSlotSchematics = slots,
         }
     end
     api.ChatFrameUtil.InsertLink = function(link)

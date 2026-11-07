@@ -250,7 +250,7 @@ events:SetScript("OnEvent", function(self, event, name)
         ns.loginTime = GetTime()
         -- Each part starts on its own, so a failure in one (reported as a normal
         -- Lua error) does not stop the others.
-        for _, init in ipairs({ ns.Comm.Init, ns.Roster.Init, ns.Scanner.Init, ns.Sync.Init, ns.RosterColumn.Init, ns.Viewer.Init }) do
+        for _, init in ipairs({ ns.Comm.Init, ns.Roster.Init, ns.Scanner.Init, ns.Sync.Init, ns.RosterColumn.Init, ns.GuildTab.Init, ns.Viewer.Init }) do
             xpcall(init, geterrorhandler())
         end
     end
@@ -315,7 +315,11 @@ SlashCmdList.GUILDPROFESSIONSRECIPES = function(message)
     elseif lower == "sync" then
         ns.Sync.SendHello(true)
     elseif lower == "probe" then
-        ns.Probe.Run(rest:lower() == "burst")
+        if rest:lower() == "ui" then
+            ns.Probe.Layout()
+        else
+            ns.Probe.Run(rest:lower() == "burst")
+        end
     elseif lower == "debug" then
         ns.debugEnabled = not ns.debugEnabled
         ns.Print(ns.debugEnabled and L["sync log on."] or L["sync log off."])

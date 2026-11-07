@@ -65,6 +65,13 @@ local function FakeCommunities(client)
         rows[#rows + 1] = row
     end
     list.rows = rows
+    -- Blizzard's side tabs, as for a guild without benefits.
+    for _, key in ipairs({ "ChatTab", "RosterTab", "GuildBenefitsTab", "GuildInfoTab", "GuildPreferredPlaySettingsTab" }) do
+        frame[key] = H.NewObject(client, "CheckButton")
+    end
+    frame.GuildBenefitsTab:Hide()
+    frame.GuildPreferredPlaySettingsTab:Hide()
+    rawset(frame, "UpdateCommunitiesTabs", function() end)
     list.ScrollBox = H.NewObject(client, "Frame")
     rawset(list.ScrollBox, "ForEachFrame", function(_, fn)
         for _, row in ipairs(rows) do
@@ -185,7 +192,27 @@ aliceRow.expanded = true
 aliceRow:RefreshExpandedColumns()
 H.check(holder._shown, "icons back in the Roster tab")
 
+H.section("UI: guild window tab")
+local guildTab = A.env.GuildProfessionsRecipesGuildTab
+H.check(guildTab ~= nil and guildTab._shown, "the guild window gets our tab")
+H.eq(guildTab and guildTab._point and guildTab._point[2], communities.GuildInfoTab, "under the lowest of Blizzard's tabs")
+H.check(guildTab and guildTab._enabled == false and guildTab.IconOverlay._shown, "disabled and dimmed, like the game's unavailable tabs")
+H.eq(guildTab and guildTab.tooltip, "Recipes & Orders (coming soon)", "its name in the tooltip")
+communities.GuildPreferredPlaySettingsTab:Show()
+communities:UpdateCommunitiesTabs()
+H.eq(guildTab._point[2], communities.GuildPreferredPlaySettingsTab, "it moves down when Blizzard shows another tab")
+communities.GuildPreferredPlaySettingsTab:Hide()
+communities.GuildInfoTab:Hide()
+communities:UpdateCommunitiesTabs()
+H.check(not guildTab._shown, "hidden wherever Guild Info is (a community, a view without tabs)")
+communities.GuildInfoTab:Show()
+communities:UpdateCommunitiesTabs()
+H.check(guildTab._shown and guildTab._point[2] == communities.GuildInfoTab, "and back on the guild")
+
 H.section("UI: recipe window")
+local order = viewer.OrderButton
+H.check(order ~= nil and order._enabled == false and order._text == "Request an order (coming soon)", "a disabled crafting order button")
+H.check(viewer.CreateButton == nil and viewer.CreateAllButton == nil and viewer.CreateMultipleInputBox == nil, "instead of the game's crafting controls")
 local provider = viewer.ScrollBox._provider
 local elements = provider and provider.elements or {}
 local headers, recipes = 0, 0
@@ -198,6 +225,7 @@ for _, element in ipairs(elements) do
 end
 H.eq(recipes, #alchemy, "all of Alice's Alchemy recipes are listed")
 H.check(headers >= 1, "recipes are grouped")
+H.eq(elements[1] and elements[1].name, "Category", "grouped by the profession's categories, noted while its window was open")
 local init = viewer.ScrollBox._view.init
 local rows = {}
 for i, element in ipairs(elements) do
@@ -213,8 +241,9 @@ for i, element in ipairs(elements) do
 end
 recipeRow._scripts.OnClick(recipeRow)
 recipeRow._scripts.OnEnter(recipeRow)
-H.check((viewer.Detail.Name._text or ""):find("Recipe", 1, true) ~= nil, "selecting a recipe shows its details")
-H.check((viewer.Detail.reagents[1].Text._text or ""):find("2 x Item2447", 1, true) ~= nil, "reagents are listed with their counts")
+H.check((viewer.Detail.Name._text or ""):find("Item" .. (recipeRow.data.recipeID + 100000), 1, true) ~= nil, "selecting a recipe shows the item it makes")
+H.check((viewer.Detail.Description._text or ""):find(tostring(recipeRow.data.recipeID), 1, true) ~= nil, "and its description")
+H.check((viewer.Detail.reagents[1].Text._text or ""):find("0/2 Item2447", 1, true) ~= nil, "reagents show what we carry over what it takes")
 H.check((viewer.Detail.KnownBy._text or ""):find("Nobody", 1, true) ~= nil, "nobody else knows it")
 A.shiftDown = true
 recipeRow._scripts.OnClick(recipeRow)
@@ -251,7 +280,7 @@ for _, tab in ipairs(viewer.Tabs or {}) do
     end
 end
 H.eq(tabs, 2, "one tab per profession with recipes")
-viewer.Tabs[2]._scripts.OnClick(viewer.Tabs[2])
+viewer.Tabs[2]._scripts.OnMouseUp(viewer.Tabs[2], "LeftButton", true)
 H.eq(#viewer.ScrollBox._provider.elements - 1, #cooking, "the second tab shows Cooking")
 
 -- Another member, and members with nothing to show.
@@ -267,8 +296,61 @@ local before = #viewer.ScrollBox._provider.elements
 world.recipeSkill[9999] = 171
 world:FireEvent(A, "NEW_RECIPE_LEARNED", 9999)
 world:RunFor(2)
-viewer.Tabs[1]._scripts.OnClick(viewer.Tabs[1])
+viewer.Tabs[1]._scripts.OnMouseUp(viewer.Tabs[1], "LeftButton", true)
 H.check(#viewer.ScrollBox._provider.elements >= before, "a new recipe appears in the open window")
+
+H.section("UI: clicking a profession")
+local function IconsOf(row)
+    local icons = {}
+    for _, button in ipairs(HolderOf(row).icons) do
+        if button._shown then
+            icons[#icons + 1] = button
+        end
+    end
+    return icons
+end
+-- Bob shares his Blacksmithing.
+world:OpenProfession(B, 164, { 50, 51 }, { 50, 51 })
+world:RunFor(1)
+world:CloseProfession(B)
+world:RunFor(200)
+bobRow:RefreshExpandedColumns()
+local bobIcon = IconsOf(bobRow)[1]
+H.check(type(bobIcon.prof.k) == "table", "Bob's recipes arrived")
+
+-- A member's profession: the saved recipes at once, online or not.
+viewer:Hide()
+bobIcon._scripts.OnClick(bobIcon)
+H.check(viewer._shown, "a member's profession opens the saved recipes")
+H.eq(#A.itemRefs, 0, "without asking the game for a link")
+H.check((viewer.Updated._text or ""):find("Saved data", 1, true) ~= nil, "saying they are saved")
+H.check((viewer.Detail.Name._text or ""):find("Item100050", 1, true) ~= nil, "with the first recipe selected")
+viewer:Hide()
+world:Logout(B)
+world:RunFor(15)
+bobIcon._scripts.OnClick(bobIcon)
+H.check(viewer._shown, "the same while the member is offline")
+world:Login(B)
+world:RunFor(10)
+
+-- Our own professions open in the game's own window.
+viewer:Hide()
+local opened
+A.env.C_TradeSkillUI.OpenTradeSkill = function(skillLine)
+    opened = skillLine
+    return true
+end
+local ownIcon = IconsOf(aliceRow)[1]
+ownIcon._scripts.OnClick(ownIcon)
+H.eq(opened, 171, "our own profession opens in the game's window")
+H.check(not viewer._shown, "not in the saved recipes")
+A.env.C_TradeSkillUI.OpenTradeSkill = function()
+    return false
+end
+ownIcon._scripts.OnClick(ownIcon)
+H.check(viewer._shown, "if the game will not open it, the saved recipes")
+A.env.C_TradeSkillUI.OpenTradeSkill = nil
+H.eq(#world.errors, 0, "clicks: no Lua errors")
 
 -- Slash commands.
 A.env.SlashCmdList.GUILDPROFESSIONSRECIPES("status")
@@ -318,6 +400,43 @@ if os.getenv("SHOW_PROBE") then
     print(report)
 end
 
+-- The layout of the game's own profession window.
+local printedCount = #A.printed
+A.env.SlashCmdList.GUILDPROFESSIONSRECIPES("probe ui")
+H.check(#A.printed == printedCount + 1 and A.printed[#A.printed]:find("open a profession window", 1, true) ~= nil, "probe ui without the window: one line in the chat")
+local function Placed(kind, left, top, width, height, regions, children)
+    local object = H.NewObject(A, kind)
+    object._shown = true
+    for name, value in pairs({ GetLeft = left, GetTop = top, GetWidth = width, GetHeight = height, GetFrameLevel = 1, GetObjectType = kind }) do
+        rawset(object, name, function()
+            return value
+        end)
+    end
+    rawset(object, "GetRegions", function()
+        return unpack(regions or {})
+    end)
+    rawset(object, "GetChildren", function()
+        return unpack(children or {})
+    end)
+    return object
+end
+local title = Placed("FontString", 120, 590, 200, 14)
+title._text = "Leatherworking"
+rawset(title, "GetFontObject", function() end)
+rawset(title, "GetTextColor", function()
+    return 1, 0.82, 0
+end)
+local bar = Placed("Frame", 210, 560, 453, 18)
+A.env.ProfessionsFrame = Placed("Frame", 100, 600, 782, 594, { title }, { bar })
+A.env.ProfessionsFrame.RankBar = bar
+A.env.SlashCmdList.GUILDPROFESSIONSRECIPES("probe ui")
+report = probe.Edit._text or ""
+H.check(report:find("ProfessionsFrame w=782 h=594", 1, true) ~= nil, "probe ui reports the window's size")
+H.check(report:find("ProfessionsFrame.RankBar [Frame] x=110 y=40 w=453 h=18", 1, true) ~= nil, "and where each piece sits")
+H.check(report:find("text=Leatherworking", 1, true) ~= nil and report:find("!! failed", 1, true) == nil, "and its texts")
+if os.getenv("SHOW_PROBE") then print(report) end
+A.env.ProfessionsFrame = nil
+
 H.section("UI: names with spaces")
 do
     local w = H.NewWorld({ seed = 44 })
@@ -335,6 +454,127 @@ do
     H.check(window ~= nil and window._shown, "/grecipes with a name that has a space opens the window")
     H.check(window and (window.ScrollBox._provider.elements[2] or {}).recipeID == 10, "showing that member's recipes")
     H.eq(#w.errors, 0, "names with spaces: no Lua errors")
+    for i = 1, math.min(#w.errors, 5) do
+        print(w.errors[i])
+    end
+end
+
+H.section("UI: filters")
+do
+    local w = H.NewWorld({ seed = 52 })
+    local me = w:NewClient("Alice", { professions = {
+        { sl = 171, r = 150, m = 225, spell = 2259, hasRecipes = true },
+        { sl = 186, r = 50, m = 75, spell = 2575, hasRecipes = true },
+    } })
+    local smith = w:NewClient("Bob", { professions = { { sl = 164, r = 100, m = 150, spell = 2018, hasRecipes = true } } })
+    w:Login(me)
+    w:Login(smith)
+    w:RunFor(5)
+    -- Bob's Blacksmithing: 101 makes a chest piece, 102 a robe, 104 boots,
+    -- 103 something not worn, 105 no item at all (like an enchantment).
+    -- 102 takes one item 2840, the others two of item 2447.
+    local all = { 101, 102, 103, 104, 105 }
+    w.itemSlots = { [100101] = "INVTYPE_CHEST", [100102] = "INVTYPE_ROBE", [100104] = "INVTYPE_FEET" }
+    w.reagents = { [102] = { { 2840, 1 } } }
+    w.noItem = { [105] = true }
+    w:OpenProfession(smith, 164, all, all)
+    w:RunFor(1)
+    w:CloseProfession(smith)
+    -- Alice shares her Alchemy, which makes nothing to wear, and her
+    -- Mining, a gathering profession (its Smelting makes bars).
+    w:OpenProfession(me, 171, { 201, 202 }, { 201, 202 })
+    w:RunFor(1)
+    w:CloseProfession(me)
+    w:OpenProfession(me, 186, { 301 }, { 301 })
+    w:RunFor(1)
+    w:CloseProfession(me)
+    w:RunFor(200)
+
+    me.ns.Viewer.Open("Bob")
+    local window = me.env.GuildProfessionsRecipesViewer
+    local function Listed()
+        local ids = {}
+        for _, element in ipairs(window.ScrollBox._provider.elements) do
+            if not element.header then
+                ids[#ids + 1] = element.recipeID
+            end
+        end
+        table.sort(ids)
+        return table.concat(ids, ",")
+    end
+    local function Toggle(entry)
+        entry.setSelected(entry.data)
+    end
+    H.eq(Listed(), "101,102,103,104,105", "no filter: every recipe")
+    H.check(not window.Filter._resetShown, "and no reset button")
+    local menu = H.MenuOf(window.Filter)
+    H.check(#menu == 2 and menu[1].text == "Have Materials" and menu[2].text == "Slots", "the menu: Have Materials and Slots, no Has skill up")
+
+    H.eq(menu[1].tooltip, "Only recipes whose reagents you carry in your bags.", "the materials entry says whose bags")
+    me.bags = { [2840] = 1 }
+    Toggle(menu[1])
+    H.eq(Listed(), "102", "have materials: what our bags can make")
+    H.check(menu[1].isSelected(menu[1].data) and window.Filter._resetShown, "checked, with the reset button")
+    me.bags[2447] = 2
+    w:FireEvent(me, "BAG_UPDATE_DELAYED")
+    w:RunFor(1)
+    H.eq(Listed(), "101,102,103,104,105", "and it follows the bags")
+    Toggle(menu[1])
+
+    local slots = menu[2].entries
+    local texts = {}
+    for i, entry in ipairs(slots) do
+        texts[i] = entry.text
+    end
+    H.eq(table.concat(texts, ","), "Check All,Uncheck All,Chest,Feet,Created Items",
+        "slots: those the profession makes, Chest and Robe as one, then the game's Created Items")
+    Toggle(slots[3])
+    H.eq(Listed(), "103,104,105", "unchecking Chest hides chest pieces and robes")
+    H.check(not slots[3].isSelected(slots[3].data) and slots[4].isSelected(slots[4].data), "the boxes show it")
+    Toggle(slots[3])
+    Toggle(slots[5])
+    H.eq(Listed(), "101,102,104,105", "unchecking Created Items hides what is not worn")
+    H.eq(slots[2].callback(slots[2].data), me.env.MenuResponse.Refresh, "Uncheck All keeps the menu open")
+    H.eq(Listed(), "105", "and leaves only recipes that make no item")
+    slots[1].callback(slots[1].data)
+    H.eq(Listed(), "101,102,103,104,105", "Check All shows every slot again")
+
+    Toggle(menu[1])
+    Toggle(slots[4])
+    window.Filter._default()
+    H.eq(Listed(), "101,102,103,104,105", "the reset button clears every filter")
+    H.check(not window.Filter._resetShown, "and hides itself")
+
+    Toggle(slots[3])
+    me.ns.Viewer.OpenMember(me.guid, 171)
+    H.eq(Listed(), "201,202", "our own Alchemy")
+    local alchemySlots = H.MenuOf(window.Filter)[2]
+    H.eq(alchemySlots and #alchemySlots.entries, 3, "its Slots: Check All, Uncheck All and Created Items")
+    H.check(not window.Filter._resetShown, "a slot hidden in another profession does not count here")
+    Toggle(alchemySlots.entries[3])
+    H.check(Listed() == "" and window.Filter._resetShown, "Created Items hides its potions")
+    me.ns.Viewer.OpenMember(me.guid, 186)
+    H.eq(Listed(), "301", "a gathering profession ignores the slots")
+    H.check(#H.MenuOf(window.Filter) == 1 and not window.Filter._resetShown, "and has no Slots entry, like the game's")
+    me.ns.Viewer.Open("Bob")
+    H.check(window.Filter._resetShown and Listed() == "104,105", "hidden slots stay hidden in the other professions")
+    window.Filter._default()
+
+    -- The search also looks at the item made and the reagents, like the game's.
+    local function Search(text)
+        window.Search._text = text
+        window.Search._scripts.OnTextChanged(window.Search)
+        w:RunFor(1)
+    end
+    Search("100104")
+    H.eq(Listed(), "104", "search: the name of the item a recipe makes")
+    w.unloaded[2840] = true
+    Search("ITEM2840")
+    H.eq(Listed(), "102", "search: a reagent's name, in any case, once the client has loaded it")
+    Search("item2447")
+    H.eq(Listed(), "101,103,104,105", "search: a reagent shared by several recipes")
+    Search("")
+    H.eq(#w.errors, 0, "filters: no Lua errors")
     for i = 1, math.min(#w.errors, 5) do
         print(w.errors[i])
     end

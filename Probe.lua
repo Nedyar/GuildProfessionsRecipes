@@ -376,3 +376,95 @@ function Probe.Run(burst)
         ShowReport(table.concat(lines, "\n"))
     end)
 end
+
+-- Layout of the game's own profession window -----------------------------------
+-- "/grecipes probe ui", with that window open: every piece shown in it, with
+-- its place relative to the window's top left corner, its size, and its art
+-- or font, so the recipe window can copy it.
+
+local MAX_LAYOUT_LINES = 1500
+local MAX_LIST_ROWS = 4  -- rows of a scrolling list after which the rest are skipped
+
+local function KeyOf(parent, child)
+    for key, value in pairs(parent) do
+        if value == child and type(key) == "string" then
+            return key
+        end
+    end
+end
+
+local function Scale(region)
+    local ok, scale = pcall(region.GetEffectiveScale, region)
+    return ok and type(scale) == "number" and scale or 1
+end
+
+local function Rect(region, origin)
+    local ok, left, top, width, height = pcall(function()
+        return region:GetLeft(), region:GetTop(), region:GetWidth(), region:GetHeight()
+    end)
+    if not ok or not left or not top then
+        return "no rect"
+    end
+    local ratio = Scale(region) / origin.scale
+    return ("x=%d y=%d w=%d h=%d"):format(left * ratio - origin.left, origin.top - top * ratio, width * ratio, height * ratio)
+end
+
+local function Art(region)
+    local kind = region:GetObjectType()
+    if kind == "Texture" or kind == "MaskTexture" then
+        local atlas = region.GetAtlas and region:GetAtlas()
+        local layer, sublevel = region:GetDrawLayer()
+        local r, g, b, a = region:GetVertexColor()
+        return ("%s layer=%s/%s color=%.2f,%.2f,%.2f,%.2f"):format(atlas and ("atlas=" .. atlas) or ("file=" .. tostring(region:GetTexture())),
+            tostring(layer), tostring(sublevel), r or 1, g or 1, b or 1, a or 1)
+    elseif kind == "FontString" then
+        local font = region:GetFontObject()
+        local r, g, b = region:GetTextColor()
+        return ("font=%s color=%.2f,%.2f,%.2f text=%s"):format(font and font:GetName() or "?", r or 1, g or 1, b or 1, (region:GetText() or ""):sub(1, 60))
+    end
+    return ""
+end
+
+local function Walk(frame, path, depth, origin)
+    if depth > 8 or #lines > MAX_LAYOUT_LINES then
+        return
+    end
+    for _, region in ipairs({ frame:GetRegions() }) do
+        if region:IsShown() then
+            local ok, art = pcall(Art, region)
+            Add("%s.%s [%s] %s %s", path, KeyOf(frame, region) or "?", region:GetObjectType(), Rect(region, origin), ok and art or "?")
+        end
+    end
+    local listed = 0
+    for _, child in ipairs({ frame:GetChildren() }) do
+        if child:IsShown() then
+            listed = listed + 1
+            if path:find("ScrollTarget$") and listed > MAX_LIST_ROWS then
+                Add("%s: more rows skipped", path)
+                return
+            end
+            local key = KeyOf(frame, child) or child:GetName() or "?"
+            Add("%s.%s [%s] %s level=%d", path, key, child:GetObjectType(), Rect(child, origin), child:GetFrameLevel())
+            Walk(child, path .. "." .. key, depth + 1, origin)
+        end
+    end
+end
+
+function Probe.Layout()
+    local window = ProfessionsFrame
+    if not window or not window:IsShown() then
+        ns.Print("open a profession window first, then type /grecipes probe ui again.")
+        return
+    end
+    lines = {}
+    Add("Guild Professions & Recipes layout probe, %s", date("%Y-%m-%d %H:%M:%S"))
+    Add("build: %s", Values(GetBuildInfo()))
+    Add("ProfessionsFrame w=%d h=%d scale=%.3f title=%s", window:GetWidth(), window:GetHeight(), Scale(window),
+        window.GetTitleText and window:GetTitleText():GetText() or "?")
+    local origin = { left = window:GetLeft(), top = window:GetTop(), scale = Scale(window) }
+    local ok, err = pcall(Walk, window, "ProfessionsFrame", 1, origin)
+    if not ok then
+        Add("!! failed: %s", tostring(err))
+    end
+    ShowReport(table.concat(lines, "\n"))
+end
