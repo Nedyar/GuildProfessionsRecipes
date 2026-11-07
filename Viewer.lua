@@ -34,7 +34,11 @@ local FLIPBOOK_FRAME_HEIGHT, FLIPBOOK_COLUMNS = 34, 2
 local REAGENT_ROWS = 4  -- reagents fill a column of four, then the next
 local REAGENT_WIDTH, REAGENT_HEIGHT, REAGENT_GAP = 160, 49, 5
 local MAX_REAGENTS = 8
-local MAX_TABS = 8
+local MAX_TABS = 16
+-- The side tabs: from TAB_TOP under the window's top to TAB_BOTTOM above its
+-- bottom, TAB_GAP apart. Their height is the game's (set at run time; about
+-- 55 in WoW Forever).
+local TAB_TOP, TAB_BOTTOM, TAB_GAP, TAB_HEIGHT = 60, 8, 2, 55
 local MAX_KNOWN_BY = 12
 local UNKNOWN_ICON = 134400
 local REAGENT_MASK = 2922105         -- the rounded square that crops reagent icons
@@ -803,18 +807,35 @@ local function UpdateHeader(record, prof)
     end
 end
 
+-- The side tabs' column: at the game's size while they fit the window's
+-- height, scaled down together to fit it when there are more (a guild can
+-- have recipes of a dozen professions).
+local function LayOutTabs(count)
+    local height = ns.Try(frame.Tabs[1].GetHeight, frame.Tabs[1]) or TAB_HEIGHT
+    local needed = count * height + (count - 1) * TAB_GAP
+    local available = HEIGHT - TAB_TOP - TAB_BOTTOM
+    local scale = needed > available and available / needed or 1
+    for i = 1, count do
+        local tab = frame.Tabs[i]
+        tab:SetScale(scale)
+        tab:ClearAllPoints()
+        -- Offsets count in the tab's own scale.
+        if i == 1 then
+            tab:SetPoint("TOPLEFT", frame, "TOPRIGHT", 0, -TAB_TOP / scale)
+        else
+            tab:SetPoint("TOPLEFT", frame.Tabs[i - 1], "BOTTOMLEFT", 0, -TAB_GAP)
+        end
+    end
+end
+
 -- professions: those to give a side tab, each { sl, lk }.
 local function UpdateTabs(professions)
     frame.Tabs = frame.Tabs or {}
-    for i = 1, math.min(#professions, MAX_TABS) do
+    local count = math.min(#professions, MAX_TABS)
+    for i = 1, count do
         local tab = frame.Tabs[i]
         if not tab then
             tab = CreateFrame("Frame", nil, frame, "LargeSideTabButtonTemplate")
-            if i == 1 then
-                tab:SetPoint("TOPLEFT", frame, "TOPRIGHT", 0, -60)
-            else
-                tab:SetPoint("TOPLEFT", frame.Tabs[i - 1], "BOTTOMLEFT", 0, -2)
-            end
             tab:SetFillToInterior(true)
             tab:EnableMouse(true)
             tab:HookScript("OnMouseUp", function(self, button, upInside)
@@ -833,8 +854,11 @@ local function UpdateTabs(professions)
         tab:SetChecked(prof.sl == state.skillLine)
         tab:Show()
     end
-    for i = #professions + 1, #frame.Tabs do
+    for i = count + 1, #frame.Tabs do
         frame.Tabs[i]:Hide()
+    end
+    if count > 0 then
+        LayOutTabs(count)
     end
 end
 

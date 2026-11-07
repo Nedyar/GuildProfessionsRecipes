@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.1 - Side tabs that fit
+
+- **Fixed**: in the guild's recipe window, every profession with shared recipes gets its side tab. Before, only the first 8 were shown.
+- The side tabs keep the game's size while they fit, and shrink together to fit the window's height when there are more.
+
 ## 0.7.0 - The guild's recipes
 
 - **Recipes & Orders tab** on the guild window: every profession as a button.

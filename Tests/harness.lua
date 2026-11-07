@@ -339,6 +339,9 @@ H.FrameMethods = {
     SetAlpha = function(self, alpha)
         self._alpha = alpha
     end,
+    SetScale = function(self, scale)
+        self._scale = scale
+    end,
     GetAlpha = function(self)
         return self._alpha or 1
     end,

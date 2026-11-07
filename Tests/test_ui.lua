@@ -713,6 +713,7 @@ do
         end
     end
     H.eq(#tabs, 2, "side tabs for the guild's professions with recipes")
+    H.check(tabs[1]._scale == 1 and tabs[1]._point[5] == -60, "at the game's size while they fit")
     tabs[2]._scripts.OnMouseUp(tabs[2], "LeftButton", true)
     H.eq(Listed(), "21,22", "another tab, another profession")
 
@@ -722,6 +723,56 @@ do
     alice.ns.Viewer.OpenGuild(129)
     H.eq(Listed(), "12,13,14", "a profession nobody shared does not open")
     H.eq(#w.errors, 0, "guild's recipes: no Lua errors")
+    for i = 1, math.min(#w.errors, 5) do
+        print(w.errors[i])
+    end
+end
+
+H.section("UI: a guild with recipes of every profession")
+do
+    local w = H.NewWorld({ seed = 73 })
+    -- Between them, Carol and Dave have recipes of all twelve professions.
+    local carol = w:NewClient("Carol", { professions = {
+        { sl = 164, r = 50, m = 75, spell = 2018, hasRecipes = true },
+        { sl = 165, r = 50, m = 75, spell = 2108, hasRecipes = true },
+        { sl = 171, r = 50, m = 75, spell = 2259, hasRecipes = true },
+        { sl = 182, r = 50, m = 75, spell = 2366, hasRecipes = true },
+        { sl = 185, r = 50, m = 75, spell = 2550, hasRecipes = true },
+        { sl = 186, r = 50, m = 75, spell = 2575, hasRecipes = true },
+    } })
+    local dave = w:NewClient("Dave", { professions = {
+        { sl = 197, r = 50, m = 75, spell = 3908, hasRecipes = true },
+        { sl = 202, r = 50, m = 75, spell = 4036, hasRecipes = true },
+        { sl = 333, r = 50, m = 75, spell = 7411, hasRecipes = true },
+        { sl = 393, r = 50, m = 75, spell = 8613, hasRecipes = true },
+        { sl = 129, r = 50, m = 75, spell = 3273, hasRecipes = true },
+        { sl = 356, r = 50, m = 75, spell = 7620, hasRecipes = true },
+    } })
+    w:Login(carol)
+    w:Login(dave)
+    w:RunFor(5)
+    for _, member in ipairs({ carol, dave }) do
+        for _, prof in ipairs(member.professions) do
+            w:OpenProfession(member, prof.sl, { prof.sl * 10 }, { prof.sl * 10 })
+            w:RunFor(1)
+            w:CloseProfession(member)
+        end
+    end
+    w:RunFor(200)
+    carol.ns.Viewer.OpenGuild(164)
+    local window = carol.env.GuildProfessionsRecipesViewer
+    local tabs = {}
+    for _, tab in ipairs(window.Tabs or {}) do
+        if tab._shown then
+            tabs[#tabs + 1] = tab
+        end
+    end
+    H.eq(#tabs, 12, "a side tab for each of the twelve professions")
+    -- 12 tabs of 55 with 11 gaps of 2 make 682; 594 - 60 - 8 = 526 is left.
+    local scale = tabs[1]._scale or 0
+    H.check(math.abs(scale - 526 / 682) < 0.001, "scaled down together to fit the window's height")
+    H.check(tabs[12]._scale == scale and math.abs(tabs[1]._point[5] * scale + 60) < 0.001, "the first one still 60 below the window's top")
+    H.eq(#w.errors, 0, "every profession: no Lua errors")
     for i = 1, math.min(#w.errors, 5) do
         print(w.errors[i])
     end
