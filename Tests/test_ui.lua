@@ -72,6 +72,22 @@ local function FakeCommunities(client)
     frame.GuildBenefitsTab:Hide()
     frame.GuildPreferredPlaySettingsTab:Hide()
     rawset(frame, "UpdateCommunitiesTabs", function() end)
+    -- Its view ("Roster", "Chat"...), and the tab marked for it. Like the
+    -- game's, setting the same view again does nothing.
+    frame.CommunitiesList = H.NewObject(client, "Frame")
+    frame.Chat = H.NewObject(client, "Frame")
+    frame.Chat.ScrollBar = H.NewObject(client, "EventFrame")
+    frame.displayMode = "Roster"
+    frame.RosterTab:SetChecked(true)
+    rawset(frame, "SetDisplayMode", function(self, mode)
+        if self.displayMode == mode then
+            return
+        end
+        self.displayMode = mode
+        for _, key in ipairs({ "ChatTab", "RosterTab", "GuildBenefitsTab", "GuildInfoTab", "GuildPreferredPlaySettingsTab" }) do
+            self[key]:SetChecked(key == mode .. "Tab")
+        end
+    end)
     list.ScrollBox = H.NewObject(client, "Frame")
     rawset(list.ScrollBox, "ForEachFrame", function(_, fn)
         for _, row in ipairs(rows) do
@@ -196,8 +212,7 @@ H.section("UI: guild window tab")
 local guildTab = A.env.GuildProfessionsRecipesGuildTab
 H.check(guildTab ~= nil and guildTab._shown, "the guild window gets our tab")
 H.eq(guildTab and guildTab._point and guildTab._point[2], communities.GuildInfoTab, "under the lowest of Blizzard's tabs")
-H.check(guildTab and guildTab._enabled == false and guildTab.IconOverlay._shown, "disabled and dimmed, like the game's unavailable tabs")
-H.eq(guildTab and guildTab.tooltip, "Recipes & Orders (coming soon)", "its name in the tooltip")
+H.eq(guildTab and guildTab.tooltip, "Recipes & Orders", "its name in the tooltip")
 communities.GuildPreferredPlaySettingsTab:Show()
 communities:UpdateCommunitiesTabs()
 H.eq(guildTab._point[2], communities.GuildPreferredPlaySettingsTab, "it moves down when Blizzard shows another tab")
@@ -208,6 +223,57 @@ H.check(not guildTab._shown, "hidden wherever Guild Info is (a community, a view
 communities.GuildInfoTab:Show()
 communities:UpdateCommunitiesTabs()
 H.check(guildTab._shown and guildTab._point[2] == communities.GuildInfoTab, "and back on the guild")
+local chatBar = communities.Chat.ScrollBar
+
+-- Its panel: every profession, those with shared recipes enabled. Alice has
+-- shared her Alchemy and Cooking; Bob has not shared his Blacksmithing yet.
+local panel = A.env.GuildProfessionsRecipesGuildPanel
+H.check(panel ~= nil and not panel._shown, "the panel starts hidden")
+-- What Blizzard's views show (COMMUNITIES_FRAME_DISPLAY_MODES), in short.
+A.env.COMMUNITIES_FRAME_DISPLAY_MODES = { CHAT = { "CommunitiesList", "MemberList", "Chat" }, ROSTER = { "CommunitiesList", "MemberList" } }
+guildTab._scripts.OnClick(guildTab)
+H.check(list:GetAlpha() == 0 and communities.Chat:GetAlpha() == 0, "Blizzard's view turns invisible, so its window's own art shows around ours")
+H.check(communities.CommunitiesList:GetAlpha() == 1, "but not the communities list")
+H.check(panel._shown and guildTab._checked and not communities.RosterTab._checked, "clicking the tab shows its panel, marked as the selected tab")
+H.check(not chatBar._shown, "the chat's scroll bar, drawn above the whole window, is hidden meanwhile")
+local professionButtons = {}
+for _, child in ipairs(ChildrenOf(A, panel.Content)) do
+    if child._type == "Button" and child._shown then
+        professionButtons[child.skillLine] = child
+    end
+end
+local professionCount = 0
+for _ in pairs(professionButtons) do
+    professionCount = professionCount + 1
+end
+H.eq(professionCount, 12, "a button for every profession")
+local alchemyButton, smithButton = professionButtons[171], professionButtons[164]
+H.check(alchemyButton._enabled and professionButtons[185]._enabled, "those with shared recipes can be clicked")
+H.check(smithButton._enabled == false and professionButtons[182]._enabled == false, "the others are disabled")
+H.check(smithButton.entry == nil and smithButton._scripts.OnEnter ~= nil, "a disabled one still has its tooltip")
+smithButton._scripts.OnEnter(smithButton)
+H.eq(smithButton.Detail._text, "No recipes shared yet", "and says so")
+H.check((alchemyButton.Detail._text or ""):find("^30 ") ~= nil, "an enabled one counts its recipes")
+alchemyButton._scripts.OnClick(alchemyButton)
+H.check(viewer._shown and #viewer.ScrollBox._provider.elements - 1 == #alchemy, "clicking it opens the guild's recipes of that profession")
+H.check((viewer.Updated._text or ""):find("Shared by 1", 1, true) ~= nil, "saying how many members shared them")
+
+-- Leaving the panel.
+communities.RosterTab:SetChecked(true)
+communities:SetDisplayMode("Roster")
+H.check(not panel._shown and not guildTab._checked and communities.RosterTab._checked, "clicking one of Blizzard's tabs closes it")
+H.check(chatBar._shown, "and the chat's scroll bar comes back")
+H.check(list:GetAlpha() == 1 and communities.Chat:GetAlpha() == 1, "and Blizzard's view")
+guildTab._scripts.OnClick(guildTab)
+communities._scripts.OnHide(communities)
+H.check(not panel._shown and communities.RosterTab._checked, "closing the window closes it, Blizzard's tab selected again")
+guildTab._scripts.OnClick(guildTab)
+communities.GuildInfoTab:Hide()
+communities:UpdateCommunitiesTabs()
+H.check(not panel._shown and not guildTab._shown, "so does leaving the guild for another community")
+communities.GuildInfoTab:Show()
+communities:UpdateCommunitiesTabs()
+A.ns.Viewer.OpenMember(A.guid, 171)
 
 H.section("UI: recipe window")
 local order = viewer.OrderButton
@@ -545,20 +611,30 @@ do
     H.eq(Listed(), "101,102,103,104,105", "the reset button clears every filter")
     H.check(not window.Filter._resetShown, "and hides itself")
 
+    -- Like the game's, another profession starts with no filters and no search.
     Toggle(slots[3])
+    Toggle(menu[1])
     me.ns.Viewer.OpenMember(me.guid, 171)
-    H.eq(Listed(), "201,202", "our own Alchemy")
+    H.eq(Listed(), "201,202", "opening another profession clears the filters")
+    H.check(not window.Filter._resetShown and not menu[1].isSelected(menu[1].data), "the menu shows it")
     local alchemySlots = H.MenuOf(window.Filter)[2]
     H.eq(alchemySlots and #alchemySlots.entries, 3, "its Slots: Check All, Uncheck All and Created Items")
-    H.check(not window.Filter._resetShown, "a slot hidden in another profession does not count here")
     Toggle(alchemySlots.entries[3])
+    window.Search._text = "201"
+    window.Search._scripts.OnTextChanged(window.Search)
+    w:RunFor(1)
     H.check(Listed() == "" and window.Filter._resetShown, "Created Items hides its potions")
-    me.ns.Viewer.OpenMember(me.guid, 186)
-    H.eq(Listed(), "301", "a gathering profession ignores the slots")
-    H.check(#H.MenuOf(window.Filter) == 1 and not window.Filter._resetShown, "and has no Slots entry, like the game's")
+    local miningTab = window.Tabs[2]
+    H.eq(miningTab and miningTab.skillLine, 186, "a side tab for our Mining")
+    miningTab._scripts.OnMouseUp(miningTab, "LeftButton", true)
+    w:RunFor(1)
+    H.eq(Listed(), "301", "changing tab clears the filters")
+    H.check(window.Search._text == "" and not window.Filter._resetShown, "and the search")
+    H.check(#H.MenuOf(window.Filter) == 1, "a gathering profession has no Slots entry, like the game's")
+    window.Tabs[1]._scripts.OnMouseUp(window.Tabs[1], "LeftButton", true)
+    H.eq(Listed(), "201,202", "and back, still clear")
     me.ns.Viewer.Open("Bob")
-    H.check(window.Filter._resetShown and Listed() == "104,105", "hidden slots stay hidden in the other professions")
-    window.Filter._default()
+    H.check(not window.Filter._resetShown and Listed() == "101,102,103,104,105", "Bob's recipes again, unfiltered")
 
     -- The search also looks at the item made and the reagents, like the game's.
     local function Search(text)
@@ -575,6 +651,77 @@ do
     H.eq(Listed(), "101,103,104,105", "search: a reagent shared by several recipes")
     Search("")
     H.eq(#w.errors, 0, "filters: no Lua errors")
+    for i = 1, math.min(#w.errors, 5) do
+        print(w.errors[i])
+    end
+end
+
+H.section("UI: the guild's recipes")
+do
+    local w = H.NewWorld({ seed = 61 })
+    local alice = w:NewClient("Alice", { professions = { { sl = 164, r = 120, m = 150, spell = 2018, hasRecipes = true } } })
+    local bob = w:NewClient("Bob", { professions = {
+        { sl = 164, r = 60, m = 75, spell = 2018, hasRecipes = true },
+        { sl = 197, r = 40, m = 75, spell = 3908, hasRecipes = true },
+    } })
+    w:Login(alice)
+    w:Login(bob)
+    w:RunFor(5)
+    -- Both know Blacksmithing 12 and 13; only Alice 11, only Bob 14.
+    w:OpenProfession(alice, 164, { 11, 12, 13, 14 }, { 11, 12, 13 })
+    w:RunFor(1)
+    w:CloseProfession(alice)
+    w:OpenProfession(bob, 164, { 11, 12, 13, 14 }, { 12, 13, 14 })
+    w:RunFor(1)
+    w:CloseProfession(bob)
+    w:OpenProfession(bob, 197, { 21, 22 }, { 21, 22 })
+    w:RunFor(1)
+    w:CloseProfession(bob)
+    w:RunFor(200)
+
+    alice.ns.Viewer.OpenGuild(164)
+    local window = alice.env.GuildProfessionsRecipesViewer
+    local function Listed()
+        local ids = {}
+        for _, element in ipairs(window.ScrollBox._provider.elements) do
+            if not element.header then
+                ids[#ids + 1] = element.recipeID
+            end
+        end
+        table.sort(ids)
+        return table.concat(ids, ",")
+    end
+    H.eq(Listed(), "11,12,13,14", "every recipe some member shared, once each")
+    H.check(window.RankBar._shown == false, "no skill bar: a guild has no single skill")
+    H.check((window.Updated._text or ""):find("Shared by 2", 1, true) ~= nil, "shared by both members")
+    local known = window.Detail.KnownBy._text or ""
+    H.check(known:find("^Known by: ") ~= nil and known:find("Alice", 1, true) ~= nil and known:find("Bob", 1, true) == nil, "who knows the selected recipe, ourselves included")
+    for _, element in ipairs(window.ScrollBox._provider.elements) do
+        if element.recipeID == 12 then
+            local row = H.NewObject(alice, "Button")
+            window.ScrollBox._view.init(row, element)
+            row._scripts.OnClick(row)
+        end
+    end
+    known = window.Detail.KnownBy._text or ""
+    H.check(known:find("Alice", 1, true) ~= nil and known:find("Bob", 1, true) ~= nil, "a recipe both know lists both")
+
+    local tabs = {}
+    for _, tab in ipairs(window.Tabs) do
+        if tab._shown then
+            tabs[#tabs + 1] = tab
+        end
+    end
+    H.eq(#tabs, 2, "side tabs for the guild's professions with recipes")
+    tabs[2]._scripts.OnMouseUp(tabs[2], "LeftButton", true)
+    H.eq(Listed(), "21,22", "another tab, another profession")
+
+    alice.ns.Viewer.OpenMember(bob.guid, 164)
+    H.check(Listed() == "12,13,14" and window.RankBar._shown ~= false, "a member's own recipes again, with their skill")
+    H.check((window.Detail.KnownBy._text or ""):find("^Also known by: ") ~= nil, "and the others who know the recipe")
+    alice.ns.Viewer.OpenGuild(129)
+    H.eq(Listed(), "12,13,14", "a profession nobody shared does not open")
+    H.eq(#w.errors, 0, "guild's recipes: no Lua errors")
     for i = 1, math.min(#w.errors, 5) do
         print(w.errors[i])
     end

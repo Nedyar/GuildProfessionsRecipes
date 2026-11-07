@@ -567,6 +567,41 @@ function Data.SortedProfessions(record)
     return list
 end
 
+-- Every recipe the guild's members have shared, by profession:
+-- [skillLine] = { sl, k = sorted recipe IDs, members = how many members
+-- shared recipes of it, lk = the profession's spell }. Professions nobody
+-- shared recipes of are left out.
+function Data.GuildRecipes(guild)
+    local byLine = {}
+    for _, record in pairs(guild and guild.members or {}) do
+        if Data.IsShareable(record) then
+            for skillLine, prof in pairs(record.p) do
+                if type(prof.k) == "table" and #prof.k > 0 then
+                    local entry = byLine[skillLine]
+                    if not entry then
+                        entry = { sl = skillLine, members = 0, set = {} }
+                        byLine[skillLine] = entry
+                    end
+                    entry.members = entry.members + 1
+                    entry.lk = entry.lk or prof.lk
+                    for _, recipeID in ipairs(prof.k) do
+                        entry.set[recipeID] = true
+                    end
+                end
+            end
+        end
+    end
+    for _, entry in pairs(byLine) do
+        local list = {}
+        for recipeID in pairs(entry.set) do
+            list[#list + 1] = recipeID
+        end
+        table.sort(list)
+        entry.k, entry.set = list, nil
+    end
+    return byLine
+end
+
 -- The list of every recipe of a profession, as seen in a profession window
 -- by any character of this WoW account.
 function Data.Catalog(skillLine)

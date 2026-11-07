@@ -70,7 +70,15 @@ ns.RegisterLocale("ruRU", function(L)
     L["%s has not shared any recipes yet."] = "%s пока не делится рецептами."
     L["Saved data"] = "Сохраненные данные"
     L["Only recipes whose reagents you carry in your bags."] = "Только рецепты, реагенты для которых есть у вас в сумках."
-    L["Recipes & Orders (coming soon)"] = "Рецепты и заказы (скоро)"
+    L["Recipes & Orders"] = "Рецепты и заказы"
+    L["Choose a profession to see every recipe your guild knows."] = "Выберите профессию, чтобы увидеть все рецепты, известные вашей гильдии."
+    L["Primary professions"] = "Основные профессии"
+    L["Secondary professions"] = "Второстепенные профессии"
+    L["%d |4recipe:recipes; · %d |4member:members;"] = "%d |4рецепт:рецепта:рецептов; · %d |4участник:участника:участников;"
+    L["No recipes shared yet"] = "Рецептов пока нет"
+    L["No guild member has shared recipes of this profession yet."] = "Никто в гильдии еще не поделился рецептами этой профессии."
+    L["Shared by %d |4member:members;"] = "Поделились: %d |4участник:участника:участников;"
+    L["Known by: %s"] = "Известен: %s"
     L["Request an order (coming soon)"] = "Запросить заказ (скоро)"
 
     -- Probe

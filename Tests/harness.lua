@@ -330,6 +330,18 @@ H.FrameMethods = {
     SetEnabled = function(self, enabled)
         self._enabled = enabled and true or false
     end,
+    SetChecked = function(self, checked)
+        self._checked = checked and true or false
+    end,
+    GetChecked = function(self)
+        return self._checked == true
+    end,
+    SetAlpha = function(self, alpha)
+        self._alpha = alpha
+    end,
+    GetAlpha = function(self)
+        return self._alpha or 1
+    end,
     CreateMaskTexture = function(self)
         return NewObject(self._client, "MaskTexture")
     end,

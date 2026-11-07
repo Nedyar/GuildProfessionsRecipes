@@ -22,8 +22,10 @@ professions and recipes of every member of your guild.
   the game has its crafting controls there is a **Request an order** button,
   not active yet: crafting orders between members come in a later version.
 - **Guild window tab.** The guild window gets a **Recipes & Orders** tab
-  under Blizzard's own tabs. It is disabled until a later version, which
-  will add a search over the whole guild's recipes and the orders.
+  under Blizzard's own tabs. It shows every profession as a button. Those
+  whose recipes some member has shared open the recipe window on all of
+  them together, each recipe saying who knows it. The others are disabled,
+  and their tooltip says why. Crafting orders come in a later version.
 - **Filters.** The window's Filter menu has two of the game's own entries:
   - **Have Materials** keeps the recipes whose reagents you carry in your
     bags, the same counts the reagents show.
@@ -33,7 +35,8 @@ professions and recipes of every member of your guild.
     stay. Like the game's, gathering professions (Mining, Herbalism,
     Skinning, Fishing) have no Slots entry.
 
-  The red button next to Filter clears them all.
+  The red button next to Filter clears them all. Like the game's, the
+  filters and the search start clear each time another profession is shown.
 - **Automatic sharing.** Each client reads its own character's professions
   and shares them with the guild through hidden addon messages, which never
   appear in any chat window. When you log in, a guild member who is online
@@ -106,7 +109,7 @@ every client turns them into names in its own language.
 | `Scanner.lua` | Reading your own professions and recipes |
 | `Sync.lua` | Announcements and the login sync |
 | `RosterColumn.lua` | The Professions column in the Roster tab |
-| `GuildTab.lua` | The Recipes & Orders tab on the guild window |
+| `GuildTab.lua` | The Recipes & Orders tab and its panel on the guild window |
 | `Viewer.lua` | The recipe window |
 | `Probe.lua` | `/grecipes probe` |
 | `Tests\` | Offline tests (not loaded by the game) |

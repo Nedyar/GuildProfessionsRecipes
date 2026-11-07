@@ -71,7 +71,15 @@ ns.RegisterLocale("deDE", function(L)
     L["%s has not shared any recipes yet."] = "%s hat noch keine Rezepte geteilt."
     L["Saved data"] = "Gespeicherte Daten"
     L["Only recipes whose reagents you carry in your bags."] = "Nur Rezepte, deren Reagenzien du in deinen Taschen hast."
-    L["Recipes & Orders (coming soon)"] = "Rezepte & Aufträge (demnächst)"
+    L["Recipes & Orders"] = "Rezepte & Aufträge"
+    L["Choose a profession to see every recipe your guild knows."] = "Wähle einen Beruf, um alle Rezepte deiner Gilde zu sehen."
+    L["Primary professions"] = "Hauptberufe"
+    L["Secondary professions"] = "Nebenberufe"
+    L["%d |4recipe:recipes; · %d |4member:members;"] = "%d |4Rezept:Rezepte; · %d |4Mitglied:Mitglieder;"
+    L["No recipes shared yet"] = "Noch keine Rezepte geteilt"
+    L["No guild member has shared recipes of this profession yet."] = "Noch kein Gildenmitglied hat Rezepte dieses Berufs geteilt."
+    L["Shared by %d |4member:members;"] = "Geteilt von %d |4Mitglied:Mitgliedern;"
+    L["Known by: %s"] = "Bekannt bei: %s"
     L["Request an order (coming soon)"] = "Auftrag anfragen (demnächst)"
 
     -- Probe

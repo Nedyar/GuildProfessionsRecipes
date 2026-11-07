@@ -70,7 +70,15 @@ ns.RegisterLocale("koKR", function(L)
     L["%s has not shared any recipes yet."] = "%s 님은 아직 제조법을 공유하지 않았습니다."
     L["Saved data"] = "저장된 데이터"
     L["Only recipes whose reagents you carry in your bags."] = "가방에 재료가 모두 있는 제조법만 표시합니다."
-    L["Recipes & Orders (coming soon)"] = "제조법 및 주문 (예정)"
+    L["Recipes & Orders"] = "제조법 및 주문"
+    L["Choose a profession to see every recipe your guild knows."] = "전문 기술을 선택하면 길드가 아는 모든 제조법을 볼 수 있습니다."
+    L["Primary professions"] = "주 전문 기술"
+    L["Secondary professions"] = "보조 전문 기술"
+    L["%d |4recipe:recipes; · %d |4member:members;"] = "제조법 %d개 · 길드원 %d명"
+    L["No recipes shared yet"] = "아직 공유된 제조법 없음"
+    L["No guild member has shared recipes of this profession yet."] = "아직 이 전문 기술의 제조법을 공유한 길드원이 없습니다."
+    L["Shared by %d |4member:members;"] = "길드원 %d명이 공유함"
+    L["Known by: %s"] = "이 제조법을 아는 길드원: %s"
     L["Request an order (coming soon)"] = "주문 요청 (예정)"
 
     -- Probe

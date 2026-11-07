@@ -70,7 +70,15 @@ ns.RegisterLocale("zhTW", function(L)
     L["%s has not shared any recipes yet."] = "%s 尚未分享任何配方。"
     L["Saved data"] = "已儲存的資料"
     L["Only recipes whose reagents you carry in your bags."] = "僅顯示你背包中材料齊全的配方。"
-    L["Recipes & Orders (coming soon)"] = "配方與訂單（即將推出）"
+    L["Recipes & Orders"] = "配方與訂單"
+    L["Choose a profession to see every recipe your guild knows."] = "選擇一個專業，查看公會已知的全部配方。"
+    L["Primary professions"] = "主專業"
+    L["Secondary professions"] = "副專業"
+    L["%d |4recipe:recipes; · %d |4member:members;"] = "%d 個配方 · %d 名成員"
+    L["No recipes shared yet"] = "尚無共享配方"
+    L["No guild member has shared recipes of this profession yet."] = "還沒有公會成員分享過這個專業的配方。"
+    L["Shared by %d |4member:members;"] = "由 %d 名成員分享"
+    L["Known by: %s"] = "會此配方的成員：%s"
     L["Request an order (coming soon)"] = "請求訂單（即將推出）"
 
     -- Probe

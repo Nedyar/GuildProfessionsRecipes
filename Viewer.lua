@@ -1,6 +1,7 @@
 -- Viewer.lua: a guild member's professions, from the saved data, so it works
--- while that member is offline. Our own professions open in the game's own
--- window instead when clicked in the roster.
+-- while that member is offline, or all the recipes the guild's members have
+-- shared of a profession. Our own professions open in the game's own window
+-- instead when clicked in the roster.
 --
 -- The window copies the game's own profession window in WoW Forever
 -- (Blizzard_Professions, measured in game): its frame, art, recipe list,
@@ -62,9 +63,11 @@ local CREATED_ITEMS_ORDER = #SLOT_TYPES + 2
 local GATHERING = { Mining = true, Herbalism = true, Skinning = true, Fishing = true }
 
 local frame
-local state = { key = nil, skillLine = nil, recipeID = nil, search = "", slots = {} }
--- The Filter menu. Like the game's, it stays as set while the window is
--- closed and across professions, until /reload.
+-- guild: true while showing all the guild's recipes of a profession (key is
+-- nil then), false while showing one member's.
+local state = { guild = false, key = nil, skillLine = nil, recipeID = nil, search = "", slots = {} }
+-- The Filter menu. Like the game's, it is cleared, with the search, each
+-- time another profession is shown (ShowCleanSearch).
 local filters = { makeable = false, hiddenSlots = {} }  -- hiddenSlots[slot name] = true
 local collapsed = {}   -- [group key] = true
 local recipeInfo = {}  -- [recipeID] = resolved name, icon, item...
@@ -311,16 +314,21 @@ local function SlotsOf(prof)
 end
 
 local function FiltersAreDefault()
-    if filters.makeable then
-        return false
+    return not filters.makeable and next(filters.hiddenSlots) == nil
+end
+
+local function ClearFilters()
+    filters.makeable = false
+    wipe(filters.hiddenSlots)
+end
+
+-- As the game does when it shows another profession: no search, no filters.
+local function ShowCleanSearch()
+    ClearFilters()
+    state.search = ""
+    if frame then
+        frame.Search:SetText("")
     end
-    -- Slots hidden in another profession do not count here.
-    for _, slot in ipairs(state.slots) do
-        if filters.hiddenSlots[slot.name] then
-            return false
-        end
-    end
-    return true
 end
 
 local function Contains(list, value)
@@ -360,6 +368,22 @@ local function ListedProfessions(record)
             list[#list + 1] = prof
         end
     end
+    return list
+end
+
+-- The guild's professions with shared recipes (Data.GuildRecipes), by name.
+local function GuildProfessions(byLine)
+    local list = {}
+    for _, entry in pairs(byLine) do
+        entry.name = ns.ProfessionName(entry.sl, entry.lk)
+        list[#list + 1] = entry
+    end
+    table.sort(list, function(a, b)
+        if a.name ~= b.name then
+            return a.name < b.name
+        end
+        return a.sl < b.sl
+    end)
     return list
 end
 
@@ -420,6 +444,12 @@ local function AtlasFor(format, kit, fallback)
         return name
     end
     return fallback
+end
+
+-- The profession's card art (the recipe panel's background), or the
+-- game's plain one for a profession without its own.
+function Viewer.CardAtlas(skillLine)
+    return AtlasFor("Profession-background-card-%s", KitOf(skillLine), "Professions-Recipe-Background")
 end
 
 -- The skill bar under the title: the profession's own fill, cut to the
@@ -680,7 +710,8 @@ local function ShowReagents(detail, recipeID, info)
     detail.KnownBy:SetPoint("TOPLEFT", detail.Reagents, "TOPLEFT", 0, -height - 16)
 end
 
--- Other members of the guild who know the recipe.
+-- The members of the guild who know the recipe: the others, when showing
+-- one member's recipes.
 local function KnownBy(recipeID)
     local guild = ns.Data.CurrentGuild(false)
     local names = {}
@@ -738,30 +769,42 @@ local function UpdateDetail()
     detail.Description:SetText(type(description) == "string" and description or "")
     ShowReagents(detail, recipeID, info)
     local names = KnownBy(recipeID)
-    detail.KnownBy:SetText(#names > 0 and L["Also known by: %s"]:format(table.concat(names, ", ")) or L["Nobody else in the guild is known to have this recipe."])
+    local knownBy = state.guild and L["Known by: %s"] or L["Also known by: %s"]
+    detail.KnownBy:SetText(#names > 0 and knownBy:format(table.concat(names, ", ")) or L["Nobody else in the guild is known to have this recipe."])
 end
 
 -- Header, tabs, status --------------------------------------------------------------
 
+-- record: the member's, or nil for the guild's recipes.
 local function UpdateHeader(record, prof)
     local name = ns.ProfessionName(state.skillLine, prof.lk)
     frame:SetPortraitToAsset(ns.ProfessionIcon(state.skillLine, prof.lk))
     local title = (TRADE_SKILL_TITLE or "%s"):format(name)
-    if state.key ~= ns.playerGUID then
-        -- As the game titles a profession seen through a link.
-        title = ("%s %s[%s]|r"):format(title, HIGHLIGHT_FONT_COLOR_CODE or "|cffffffff", ns.Data.NameOf(state.key, record))
+    -- As the game titles a profession seen through a link: whose it is.
+    local owner = state.guild and GetGuildInfo("player") or (state.key ~= ns.playerGUID and ns.Data.NameOf(state.key, record))
+    if owner then
+        title = ("%s %s[%s]|r"):format(title, HIGHLIGHT_FONT_COLOR_CODE or "|cffffffff", owner)
     end
     frame:SetTitle(title)
-    UpdateRankBar(frame.RankBar, state.skillLine, name, prof.r, prof.m)
-    frame.Detail.Background:SetAtlas(AtlasFor("Profession-background-card-%s", KitOf(state.skillLine), "Professions-Recipe-Background"))
+    -- A whole guild has no single skill.
+    frame.RankBar:SetShown(not state.guild)
+    if not state.guild then
+        UpdateRankBar(frame.RankBar, state.skillLine, name, prof.r, prof.m)
+    end
+    frame.Detail.Background:SetAtlas(Viewer.CardAtlas(state.skillLine))
 
     -- Where these recipes come from.
-    local source = state.key == ns.playerGUID and L["your own data"] or (record.fh and L["from the member"] or L["passed on by the guild"])
-    frame.Updated:SetText(("%s · %s (%s)"):format(Paint(L["Saved data"], GoldColor()), L["Updated %s ago"]:format(ns.Ago(record.t)), source))
+    local saved = Paint(L["Saved data"], GoldColor())
+    if state.guild then
+        frame.Updated:SetText(("%s · %s"):format(saved, L["Shared by %d |4member:members;"]:format(prof.members)))
+    else
+        local source = state.key == ns.playerGUID and L["your own data"] or (record.fh and L["from the member"] or L["passed on by the guild"])
+        frame.Updated:SetText(("%s · %s (%s)"):format(saved, L["Updated %s ago"]:format(ns.Ago(record.t)), source))
+    end
 end
 
-local function UpdateTabs(record)
-    local professions = ListedProfessions(record)
+-- professions: those to give a side tab, each { sl, lk }.
+local function UpdateTabs(professions)
     frame.Tabs = frame.Tabs or {}
     for i = 1, math.min(#professions, MAX_TABS) do
         local tab = frame.Tabs[i]
@@ -777,6 +820,7 @@ local function UpdateTabs(record)
             tab:HookScript("OnMouseUp", function(self, button, upInside)
                 if button == "LeftButton" and upInside ~= false and self.skillLine ~= state.skillLine then
                     state.skillLine, state.recipeID = self.skillLine, nil
+                    ShowCleanSearch()
                     Refresh()
                 end
             end)
@@ -808,24 +852,31 @@ function Refresh(keepScroll)
     if not frame or not frame:IsShown() then
         return
     end
-    local record = CurrentRecord()
-    local prof = CurrentProfession()
-    if not record or type(prof and prof.k) ~= "table" then
+    local record, prof, professions
+    if state.guild then
+        local byLine = ns.Data.GuildRecipes(ns.Data.CurrentGuild(false))
+        professions = GuildProfessions(byLine)
+        prof = state.skillLine and byLine[state.skillLine]
+    else
+        record = CurrentRecord()
+        prof = CurrentProfession()
+        professions = record and ListedProfessions(record) or {}
+    end
+    if type(prof and prof.k) ~= "table" then
         -- The data changed under us: pick another profession, or close.
-        local professions = record and ListedProfessions(record) or {}
         if #professions == 0 then
             frame:Hide()
             return
         end
-        state.skillLine, state.recipeID = professions[1].sl, nil
-        prof = record.p[state.skillLine]
+        prof = professions[1]
+        state.skillLine, state.recipeID = prof.sl, nil
     end
     local elements, shown = BuildList(prof)
     if not (state.recipeID and Contains(prof.k, state.recipeID)) then
         state.recipeID = FirstRecipe(elements)
     end
     UpdateHeader(record, prof)
-    UpdateTabs(record)
+    UpdateTabs(professions)
     frame.Count:SetText(L["%d of %d |4recipe:recipes;"]:format(shown, #prof.k))
     frame.Count:SetShown(shown == 0)
     frame.Filter:ValidateResetState()
@@ -903,8 +954,7 @@ local function SetupFilterMenu(_, root)
 end
 
 local function ResetFilters()
-    filters.makeable = false
-    wipe(filters.hiddenSlots)
+    ClearFilters()
     Refresh()
 end
 
@@ -1203,12 +1253,34 @@ function Viewer.OpenMember(guid, skillLine)
             chosen = skillLine
         end
     end
-    if state.key ~= key or state.skillLine ~= chosen then
+    if state.guild or state.key ~= key or state.skillLine ~= chosen then
         state.recipeID = nil
     end
-    state.key, state.skillLine = key, chosen
-    frame.Search:SetText("")
-    state.search = ""
+    state.guild, state.key, state.skillLine = false, key, chosen
+    ShowCleanSearch()
+    frame:Show()
+    Refresh()
+end
+
+-- Opens the window on every recipe of a profession that the guild's
+-- members have shared (the Recipes & Orders tab).
+function Viewer.OpenGuild(skillLine)
+    local guild = ns.Data.CurrentGuild(false)
+    if not guild then
+        ns.Print(L["you are not in a guild (or the guild has not loaded yet)."])
+        return
+    end
+    if not ns.Data.GuildRecipes(guild)[skillLine] then
+        return
+    end
+    if not frame then
+        CreateWindow()
+    end
+    if not state.guild or state.skillLine ~= skillLine then
+        state.recipeID = nil
+    end
+    state.guild, state.key, state.skillLine = true, nil, skillLine
+    ShowCleanSearch()
     frame:Show()
     Refresh()
 end

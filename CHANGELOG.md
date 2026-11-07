@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.7.0 - The guild's recipes
+
+- **Recipes & Orders tab** on the guild window: every profession as a button.
+  - A profession that some guildmate has shared recipes of opens the recipe window on all of them together.
+  - The others are disabled, and their tooltip says why.
+- **The guild's recipes** in the recipe window: every recipe of a profession that any guildmate knows, each listed once and showing who knows it. Side tabs switch between the guild's professions.
+- **Like the game's window**, the filters and the search are cleared when you switch to another profession.
+- Crafting orders are still to come; the **Request an order** button stays disabled until then.
+
 ## 0.6.0 - A recipe window like the game's
 
 - **Recipe window redesigned** to look like the game's own profession window. It has the same frame and art and the skill bar. The recipe panel shows the item each recipe makes, its description and its reagents with how many you carry. Side tabs switch between the member's professions.
