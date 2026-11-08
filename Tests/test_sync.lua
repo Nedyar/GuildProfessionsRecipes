@@ -47,9 +47,9 @@ local function HasList(viewer, owner, skillLine, expected)
     return expected == nil or H.SameList(prof.k, expected)
 end
 
--- The message type of a logged single-part chunk.
+-- The message type of a logged single-part chunk (protocol 3).
 local function TypeOf(world, text)
-    if text:sub(1, 1) ~= "2" or text:sub(5, 6) ~= "AA" then
+    if text:sub(1, 1) ~= "3" or text:sub(5, 6) ~= "AA" then
         return nil
     end
     local raw = H.Dec64(text:sub(7))

@@ -250,7 +250,7 @@ events:SetScript("OnEvent", function(self, event, name)
         ns.loginTime = GetTime()
         -- Each part starts on its own, so a failure in one (reported as a normal
         -- Lua error) does not stop the others.
-        for _, init in ipairs({ ns.Comm.Init, ns.Roster.Init, ns.Scanner.Init, ns.Sync.Init, ns.RosterColumn.Init, ns.GuildTab.Init, ns.Viewer.Init }) do
+        for _, init in ipairs({ ns.Comm.Init, ns.Roster.Init, ns.Scanner.Init, ns.Sync.Init, ns.Orders.Init, ns.OrderList.Init, ns.RosterColumn.Init, ns.GuildTab.Init, ns.Viewer.Init }) do
             xpcall(init, geterrorhandler())
         end
     end

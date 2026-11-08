@@ -175,6 +175,13 @@ local function OutputName(recipeID, info)
     return Paint(DisplayName(recipeID, info), GoldColor())
 end
 
+-- What a recipe makes, for the order form and lists: its name (colored as
+-- over the recipe panel) and icon.
+function Viewer.RecipeOutput(recipeID)
+    local info = ResolveRecipe(recipeID)
+    return OutputName(recipeID, info), info.icon or UNKNOWN_ICON
+end
+
 -- The group a recipe is listed under: its profession category when known,
 -- else the kind of item it makes. Returns key, name, order.
 local function GroupOf(recipeID, info)
@@ -419,6 +426,16 @@ local function ShowItemTooltip(owner, itemID, recipeID)
         GameTooltip:SetSpellByID(recipeID)
     end
     GameTooltip:Show()
+end
+
+-- For the order form and lists: the tooltip of what a recipe makes, and a
+-- shift-click that links the recipe in the chat, as on the recipe panel.
+function Viewer.ShowOutputTooltip(owner, recipeID)
+    ShowItemTooltip(owner, ResolveRecipe(recipeID).itemID, recipeID)
+end
+
+function Viewer.LinkRecipe(recipeID)
+    InsertLink(RecipeLink(recipeID))
 end
 
 -- Profession art ----------------------------------------------------------------
@@ -739,6 +756,7 @@ end
 local function UpdateDetail()
     local detail = frame.Detail
     local recipeID = state.recipeID
+    frame.OrderButton:SetEnabled(recipeID ~= nil)
     if not recipeID then
         detail.Content:Hide()
         detail.Empty:Show()
@@ -1234,10 +1252,17 @@ local function CreateWindow()
     CreatePanel(page, list)
 
     -- Where the game has its crafting controls, centred under the recipe
-    -- panel: crafting orders, disabled until a later version.
-    local order = RedButton(page, L["Request an order (coming soon)"])
+    -- panel: a crafting order for the selected recipe. Looking at another
+    -- member's recipes, the form suggests them as the crafter.
+    local order = RedButton(page, L["Request an order"])
     order:SetPoint("BOTTOM", page, "BOTTOMRIGHT", -(PANEL_RIGHT_GAP + PANEL_WIDTH / 2), 7)
     order:SetEnabled(false)
+    order:SetScript("OnClick", function()
+        if state.recipeID then
+            local member = not state.guild and state.key ~= ns.playerGUID and state.key or nil
+            ns.OrderForm.Open(state.skillLine, state.recipeID, nil, member)
+        end
+    end)
     frame.OrderButton = order
 
     frame:SetScript("OnHide", function()

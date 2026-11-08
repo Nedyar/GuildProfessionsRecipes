@@ -120,6 +120,75 @@ local function CleanList(list, max)
     return ids
 end
 
+local function IsTime(value, now)
+    return type(value) == "number" and value == floor(value) and value >= MIN_TIME and value < 1e12
+        and not (now and value > now + FUTURE_SLACK)
+end
+
+-- An order's note as given by another client, safe to show: no escape
+-- sequences and no control characters but line breaks.
+function Data.CleanNote(note)
+    if type(note) ~= "string" then
+        return nil
+    end
+    note = note:gsub("|", ""):gsub("[%z\1-\9\11-\31\127]", "")
+    if #note > LIMITS.note then
+        return nil
+    end
+    return note
+end
+
+-- Checked copies of a record's crafting orders and answers (format 3), or
+-- nil when they cannot be trusted. See Pack.lua and Orders.lua.
+local function CleanOrders(orders, now)
+    if type(orders) ~= "table" then
+        return nil
+    end
+    local clean, count = {}, 0
+    for id, order in pairs(orders) do
+        if not IsCount(id, 999999) or id == 0 or type(order) ~= "table" then
+            return nil
+        end
+        local note = Data.CleanNote(order.note or "")
+        if not (IsID(order.sl) and IsID(order.r) and IsCount(order.q, LIMITS.quantity) and order.q > 0
+                and (order.d == nil or Data.IsGUID(order.d)) and IsCount(order.tip or 0, LIMITS.tip) and note
+                and IsTime(order.c, now) and IsTime(order.u, now) and order.u >= order.c
+                and IsCount(order.e, LIMITS.days) and order.e > 0 and IsCount(order.s or 0, 2)) then
+            return nil
+        end
+        clean[id] = { sl = order.sl, r = order.r, q = order.q, d = order.d, m = order.m == true, tip = order.tip or 0,
+            note = note, c = order.c, u = order.u, e = order.e, s = order.s or 0 }
+        count = count + 1
+        if count > LIMITS.orders then
+            return nil
+        end
+    end
+    return clean
+end
+
+local function CleanAnswers(answers, now)
+    if type(answers) ~= "table" then
+        return nil
+    end
+    local clean, count = {}, 0
+    for key, answer in pairs(answers) do
+        local requester, id
+        if type(key) == "string" then
+            requester, id = key:match("^(.+):(%d+)$")
+        end
+        if not (requester and Data.IsGUID(requester) and type(answer) == "table" and IsCount(answer.s, 3) and answer.s > 0
+                and IsTime(answer.u, now) and IsTime(answer.ou, now)) then
+            return nil
+        end
+        clean[requester .. ":" .. tonumber(id)] = { s = answer.s, u = answer.u, ou = answer.ou }
+        count = count + 1
+        if count > LIMITS.answers then
+            return nil
+        end
+    end
+    return clean
+end
+
 -- A checked copy of a record, or nil when it cannot be trusted. now is given
 -- for records from other clients, which may not be dated in the future.
 function Data.CleanRecord(record, now)
@@ -160,6 +229,19 @@ function Data.CleanRecord(record, now)
         clean.p[skillLine] = cleanProf
         count = count + 1
         if count > LIMITS.professions then
+            return nil
+        end
+    end
+    -- Absent (nil) in records of format 2: nothing known of their orders.
+    if record.o ~= nil then
+        clean.o = CleanOrders(record.o, now)
+        if not clean.o then
+            return nil
+        end
+    end
+    if record.a ~= nil then
+        clean.a = CleanAnswers(record.a, now)
+        if not clean.a then
             return nil
         end
     end
@@ -213,12 +295,23 @@ local function CarryLists(kept, other)
             changed = true
         end
     end
+    -- Orders and answers unknown in the kept copy (its owner lost them, or
+    -- it came from a 0.7 client) are not wiped either.
+    if kept.o == nil and other.o ~= nil then
+        kept.o = other.o
+        changed = true
+    end
+    if kept.a == nil and other.a ~= nil then
+        kept.a = other.a
+        changed = true
+    end
     kept.n = kept.n or other.n
     return changed
 end
 
 -- Our own record is only ever changed by us, but if we lost a profession's
--- recipe list, a copy coming back from the guild fills it in.
+-- recipe list, or our crafting orders and answers (o and a never known on
+-- this client), a copy coming back from the guild fills them in.
 local function AdoptOwnLists(own, record)
     local changed = false
     for skillLine, prof in pairs(own.p) do
@@ -227,6 +320,14 @@ local function AdoptOwnLists(own, record)
             prof.k = theirs.k
             changed = true
         end
+    end
+    if own.o == nil and record.o ~= nil then
+        own.o = record.o
+        changed = true
+    end
+    if own.a == nil and record.a ~= nil then
+        own.a = record.a
+        changed = true
     end
     return changed
 end

@@ -19,13 +19,36 @@ professions and recipes of every member of your guild.
   makes, its reagents (with how many you carry) and who else in the guild
   knows it. It works while the member is offline, and says that the data is
   saved and how old it is. Shift-click a recipe to link it in chat. Where
-  the game has its crafting controls there is a **Request an order** button,
-  not active yet: crafting orders between members come in a later version.
+  the game has its crafting controls there is a **Request an order** button
+  for the selected recipe (see Crafting orders).
 - **Guild window tab.** The guild window gets a **Recipes & Orders** tab
-  under Blizzard's own tabs. It shows every profession as a button. Those
-  whose recipes some member has shared open the recipe window on all of
-  them together, each recipe saying who knows it. The others are disabled,
-  and their tooltip says why. Crafting orders come in a later version.
+  under Blizzard's own tabs, with four subtabs:
+  - **Professions:** every profession as a button. Those whose recipes some
+    member has shared open the recipe window on all of them together, each
+    recipe saying who knows it. The others are disabled, and their tooltip
+    says why.
+  - **Pending orders:** orders for you, personal ones to accept or decline,
+    and those you accepted, to complete or release.
+  - **Order list:** the open orders, by default only those whose recipe you
+    know, to accept.
+  - **Requested orders:** yours, to modify or cancel while nobody has taken
+    them, to finish once completed, and to delete once finished, cancelled
+    or expired.
+- **Crafting orders.** Ask a guildmate to craft a recipe for you:
+  - **Open**, so anyone who knows the recipe may accept it, or **Personal**,
+    for one member you pick from those who know it.
+  - Say whether you provide the materials and add a tip in gold, silver and
+    copper; choose the quantity and how many days the order lasts (7 by
+    default); add a note.
+  - The crafter marks it completed, then you mark it finished. A crafter
+    who cannot make it after all releases it, and it is open again.
+  - You are told in the chat when an order is directed to you or when one of
+    yours is accepted, declined, completed, released or expires, also of
+    changes made while you were offline. Blizzard's notification mark shows
+    on the tab while an order waits for you.
+  - Orders travel like the rest of the data, so they reach members who are
+    offline when they log in. Members need version 0.8 or later to see
+    them.
 - **Filters.** The window's Filter menu has two of the game's own entries:
   - **Have Materials** keeps the recipes whose reagents you carry in your
     bags, the same counts the reagents show.
@@ -83,7 +106,8 @@ The addon sends only IDs (skill lines and recipe spell IDs) plus skill levels;
 every client turns them into names in its own language.
 
 - **Announcements.** When your skills or recipes change, your client tells the
-  guild once things have been quiet for 30 seconds.
+  guild once things have been quiet for 30 seconds; a change to your crafting
+  orders goes out within seconds.
 - **Login sync.** After logging in, your client sends one short message with a
   summary of what it holds. If any online member holds something different,
   one of them (normally just one) offers to sync. The two clients then swap
@@ -95,6 +119,15 @@ every client turns them into names in its own language.
   stamped with a time. Every client keeps the newest copy of each member, so
   all clients end up with the same data. Members who leave the guild are
   dropped after 30 days.
+- **Crafting orders.** An order is kept in its requester's data, and each
+  crafter's answer (accepted, declined, completed) in that crafter's, so the
+  same rule holds. Every client works out an order's state from both: when
+  two crafters accept an open order at once, the earlier acceptance wins
+  everywhere. Finished, cancelled and expired orders are dropped three days
+  later, or at once when their requester deletes them.
+- **Versions.** Version 0.8 changed the messages to carry orders. It still
+  reads what members on 0.7 announce, but 0.7 cannot read 0.8, so members
+  on 0.7 are asked to update.
 
 ## Files
 
@@ -111,6 +144,9 @@ every client turns them into names in its own language.
 | `RosterColumn.lua` | The Professions column in the Roster tab |
 | `GuildTab.lua` | The Recipes & Orders tab and its panel on the guild window |
 | `Viewer.lua` | The recipe window |
+| `Orders.lua` | Crafting orders: their states, our changes, the clean-up |
+| `OrderForm.lua` | The window to request or change an order |
+| `OrderList.lua` | The order lists of the guild window tab, and the notices |
 | `Probe.lua` | `/grecipes probe` |
 | `Tests\` | Offline tests (not loaded by the game) |
 | `.github\logo.png` | The project logo (not part of the addon) |
@@ -124,7 +160,7 @@ a guild roster and a fake server that delivers addon messages between many
 clients, with the server's send limits. They need a Lua 5.1 interpreter:
 
 ```
-lua5.1 Tests\run.lua <path to GuildProfessionsRecipes> <path to GuildProfessionsRecipes\Tests> [unit] [sync] [ui]
+lua5.1 Tests\run.lua <path to GuildProfessionsRecipes> <path to GuildProfessionsRecipes\Tests> [unit] [sync] [orders] [ui]
 ```
 
 - `unit`: the binary format, Base64, checks and merge rules, loading and
@@ -134,6 +170,10 @@ lua5.1 Tests\run.lua <path to GuildProfessionsRecipes> <path to GuildProfessions
   throttled whispers, a responder leaving mid-sync, a 40-member guild, a fresh
   install, and WoW Forever's ways: names with spaces, members on several
   realms, senders without a realm and whispers by name only.
+- `orders`: the record format with orders, their states, open and personal
+  orders between several clients (online, offline, at the same time),
+  expiry, the request form, the order lists and the notices, and members
+  still on 0.7.
 - `ui`: the roster column, the guild window tab and the recipe window on
   stand-ins for Blizzard's frames, the slash commands and the probe.
 

@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.8.0 - Crafting orders
+
+- **Members on 0.7 must update.** Messages between players changed to carry orders. Version 0.8 still reads what 0.7 sends, but 0.7 cannot read 0.8. Until they update, members on 0.7 see a "newer version" notice and stop getting your changes.
+- **Crafting orders** between guildmates. Select a recipe in the recipe window and click **Request an order**:
+  - **Open**, so anyone who knows the recipe can accept it, or **Personal**, for one member you pick among those who know it.
+  - Say whether you provide the materials and add a tip in gold, silver and copper.
+  - Choose the quantity and how many days the order lasts (7 by default), and add a note.
+- **Three new subtabs** on the guild window's Recipes & Orders tab:
+  - **Pending orders**: personal orders for you, to accept or decline, and the orders you accepted, to complete or release.
+  - **Order list**: the open orders, by default only those whose recipe you know, to accept.
+  - **Requested orders**: your orders. Modify or cancel them while nobody has taken them, finish them once completed, and delete them once finished, cancelled or expired.
+- **How an order ends:** the crafter marks it completed, then you mark it finished. A crafter who cannot make it after all releases it, and it is open again.
+- **Notices** in the chat when an order is directed to you, or when one of yours is accepted, declined, completed, released or expires. Changes made while you were offline are told when you log in. A mark on the tab shows while an order waits for you.
+- Orders reach guildmates who are offline when they log in, like the rest of the data.
+- Point at an order's item for its tooltip; shift-click links it in the chat.
+
 ## 0.7.1 - Side tabs that fit
 
 - **Fixed**: in the guild's recipe window, every profession with shared recipes gets its side tab. Before, only the first 8 were shown.

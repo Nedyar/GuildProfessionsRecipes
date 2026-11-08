@@ -26,6 +26,7 @@ local T_UPDATE, T_LEVELS, T_HELLO, T_OFFER, T_MANIFEST, T_REQUEST, T_RECORDS, T_
 
 local BROADCAST_QUIET = 30     -- own changes are sent once quiet this long...
 local BROADCAST_MAX_WAIT = 120 -- ...or this long after the first one
+local ORDERS_QUIET = 2         -- changes to crafting orders go out almost at once
 local LOGIN_DELAY = { 8, 15 }  -- spreads the hellos of a login wave
 local HELLO_INTERVAL = 45 * 60 -- a hello now and then catches anything missed
 local HELLO_TIMEOUT = 15       -- how long a newcomer waits for an offer
@@ -39,6 +40,7 @@ local BATCH_BYTES = 1200       -- packed record bytes per R message
 local MAX_ROUNDS = 3           -- extra hellos after a sync that changed something
 
 local pendingKind              -- own change waiting to be announced: "U" or "S"
+local ordersPending            -- the waiting change includes crafting orders
 local hello                    -- our hello waiting for offers: { timer, manual }
 local joined                   -- the session we started: { peer, id, last, received, manual }
 local serving = {}             -- sessions we answer: [newcomer] = { id, state, last }
@@ -122,14 +124,17 @@ function Sync.BroadcastOwn()
     end
     if Comm.Send(writer:Result(), "GUILD", nil, "own") then
         state.sentFP, state.sentT, state.sentGuild = fingerprint, record.t, guildKey
-        pendingKind = nil
+        pendingKind, ordersPending = nil, nil
         ns.Debug("announced our professions")
     end
 end
 
+-- kind: "U" (professions or recipes), "S" (skill levels only) or "O"
+-- (crafting orders: a whole record, sent within seconds).
 local function OnOwnChanged(kind)
-    pendingKind = (pendingKind == "U" or kind == "U") and "U" or "S"
-    ns.Debounce("BroadcastOwn", BROADCAST_QUIET, Sync.BroadcastOwn, BROADCAST_MAX_WAIT)
+    pendingKind = (pendingKind == "U" or kind ~= "S") and "U" or "S"
+    ordersPending = ordersPending or kind == "O"
+    ns.Debounce("BroadcastOwn", ordersPending and ORDERS_QUIET or BROADCAST_QUIET, Sync.BroadcastOwn, BROADCAST_MAX_WAIT)
 end
 
 -- Sessions -------------------------------------------------------------------
@@ -339,8 +344,8 @@ end
 
 local handlers = {}
 
-handlers[T_UPDATE] = function(reader, sender, guildKey)
-    local key, record = Pack.ReadRecord(reader)
+handlers[T_UPDATE] = function(reader, sender, guildKey, protocol)
+    local key, record = Pack.ReadRecord(reader, protocol)
     -- Only the member themselves may announce their record.
     if key ~= Roster.GUIDOfSender(sender) then
         return
@@ -543,15 +548,25 @@ handlers[T_END] = function(reader, sender)
     end
 end
 
-local function OnMessage(raw, sender)
+-- What a 0.2 to 0.7 client (protocol 2) may tell us: its own changes. Its
+-- hellos and sync sessions are left alone, since it cannot read our replies.
+local LEGACY_TYPES = { [T_UPDATE] = true, [T_LEVELS] = true }
+
+-- protocol: the one the message came in (Comm), 3 unless given.
+local function OnMessage(raw, sender, _, protocol)
     local guildKey = Roster.guildKey
     if not guildKey or not Roster.IsKnownSender(sender) then
         return
     end
+    protocol = protocol or Pack.FORMAT
     local reader = Pack.Reader(raw)
-    local handler = handlers[reader:Byte()]
+    local kind = reader:Byte()
+    local handler = handlers[kind]
+    if protocol < Pack.FORMAT and not LEGACY_TYPES[kind] then
+        return
+    end
     if handler and reader:UInt() == Pack.Hash(guildKey) then
-        handler(reader, sender, guildKey)
+        handler(reader, sender, guildKey, protocol)
     end
 end
 

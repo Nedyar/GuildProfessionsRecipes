@@ -14,7 +14,17 @@ Pack.LIMITS = {
     recipes = 1500,
     rank = 1000,
     text = 64,
+    orders = 20,       -- crafting orders a member has requested
+    answers = 60,      -- answers a member has given to others' orders
+    note = 200,        -- bytes of an order's note
+    quantity = 999,
+    days = 30,         -- how long an order may stay open
+    tip = 100000000,   -- copper: 10,000 gold
 }
+
+-- The record format this version writes: 3 adds crafting orders (0.8).
+-- Format 2 (0.2 to 0.7) is still read.
+Pack.FORMAT = 3
 
 local TWO_32 = 4294967296
 local TWO_53 = 9007199254740992
@@ -154,7 +164,15 @@ end
 -- A record is what one member shares about themselves, under their GUID:
 --   { n = their name, t = time of their last change, av = addon version,
 --     p = { [skillLineID] = { r = rank, m = max rank, o = display order,
---                             lk = the profession's spell, k = recipes } } }
+--                             lk = the profession's spell, k = recipes } },
+--     o = the crafting orders they requested (format 3, see Orders.lua):
+--         { [id] = { sl, r = recipe, q = quantity, d = GUID it is directed
+--                    to or nil, m = they provide the materials, tip = copper,
+--                    note, c = created, u = updated, e = days it lasts,
+--                    s = state } },
+--     a = their answers to others' orders (format 3):
+--         { ["<requester GUID>:<id>"] = { s = state, u = time,
+--                                         ou = the order's u answered } } }
 -- k is a sorted list of recipe IDs, false for professions without recipes,
 -- or nil while the owner's recipes have not been read.
 local K_UNKNOWN, K_NONE, K_LIST = 0, 1, 2
@@ -168,7 +186,69 @@ local function SortedKeys(map)
     return keys
 end
 
-function Pack.WriteRecord(writer, guid, record)
+-- Each list starts with its count plus one, or 0 when unknown (nil): a
+-- client that lost its data does not tell the guild it has no orders.
+local function WriteOrders(writer, record)
+    local orders = record.o or {}
+    local ids = SortedKeys(orders)
+    writer:UInt(record.o and #ids + 1 or 0)
+    for _, id in ipairs(ids) do
+        local order = orders[id]
+        writer:UInt(id)
+        writer:UInt(order.sl)
+        writer:UInt(order.r)
+        writer:UInt(order.q)
+        writer:Str(order.d or "")
+        writer:Byte(order.m and 1 or 0)
+        writer:UInt(order.tip or 0)
+        writer:Str(order.note or "")
+        writer:UInt(order.c)
+        writer:UInt(order.u)
+        writer:UInt(order.e)
+        writer:Byte(order.s or 0)
+    end
+    local answers = record.a or {}
+    local keys = SortedKeys(answers)
+    writer:UInt(record.a and #keys + 1 or 0)
+    for _, key in ipairs(keys) do
+        local answer = answers[key]
+        writer:Str(key)
+        writer:Byte(answer.s)
+        writer:UInt(answer.u)
+        writer:UInt(answer.ou)
+    end
+end
+
+local function ReadOrders(reader, record)
+    local count = reader:UInt()
+    if count > Pack.LIMITS.orders + 1 then
+        error("too many orders", 0)
+    end
+    record.o = count > 0 and {} or nil
+    for _ = 2, count do
+        local id = reader:UInt()
+        local order = { sl = reader:UInt(), r = reader:UInt(), q = reader:UInt() }
+        local target = reader:Str()
+        order.d = target ~= "" and target or nil
+        order.m = reader:Byte() == 1
+        order.tip = reader:UInt()
+        order.note = reader:Str(Pack.LIMITS.note)
+        order.c, order.u, order.e, order.s = reader:UInt(), reader:UInt(), reader:UInt(), reader:Byte()
+        record.o[id] = order
+    end
+    count = reader:UInt()
+    if count > Pack.LIMITS.answers + 1 then
+        error("too many answers", 0)
+    end
+    record.a = count > 0 and {} or nil
+    for _ = 2, count do
+        local key = reader:Str()
+        record.a[key] = { s = reader:Byte(), u = reader:UInt(), ou = reader:UInt() }
+    end
+end
+
+-- format: the one to write (Pack.FORMAT unless given; 2 has no orders).
+function Pack.WriteRecord(writer, guid, record, format)
     writer:Str(guid)
     writer:Str(record.n or "")
     writer:UInt(record.t)
@@ -191,10 +271,15 @@ function Pack.WriteRecord(writer, guid, record)
             Pack.WriteList(writer, prof.k)
         end
     end
+    if (format or Pack.FORMAT) >= 3 then
+        WriteOrders(writer, record)
+    end
 end
 
 -- Returns guid, record. The record still has to be checked (Data.CleanRecord).
-function Pack.ReadRecord(reader)
+-- format: the one it was written in (Pack.FORMAT unless given). A format 2
+-- record has no o and a: nothing is known of its owner's orders.
+function Pack.ReadRecord(reader, format)
     local guid = reader:Str()
     local name = reader:Str()
     local record = { t = reader:UInt(), av = reader:UInt(), p = {} }
@@ -221,12 +306,15 @@ function Pack.ReadRecord(reader)
         end
         record.p[skillLine] = prof
     end
+    if (format or Pack.FORMAT) >= 3 then
+        ReadOrders(reader, record)
+    end
     return guid, record
 end
 
-function Pack.RecordString(key, record)
+function Pack.RecordString(key, record, format)
     local writer = Pack.Writer()
-    Pack.WriteRecord(writer, key, record)
+    Pack.WriteRecord(writer, key, record, format)
     return writer:Result()
 end
 

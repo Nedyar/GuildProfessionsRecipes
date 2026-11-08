@@ -1,8 +1,10 @@
 -- GuildTab.lua: a "Recipes & Orders" tab on the guild window, under
--- Blizzard's own side tabs (Chat, Roster, Guild Info...). It shows every
--- profession as a button. Those whose recipes some member has shared open
--- the recipe window on all of them; the others are disabled. Crafting
--- orders come in a later version.
+-- Blizzard's own side tabs (Chat, Roster, Guild Info...). Its subtabs:
+--   - Professions: every profession as a button. Those whose recipes some
+--     member has shared open the recipe window on all of them; the others
+--     are disabled.
+--   - Pending orders, Order list and Requested orders: crafting orders
+--     (OrderList.lua, Orders.lua).
 --
 -- Like the roster column, it only hooks and reads Blizzard's frames. It never
 -- changes the guild window's display mode, which would taint the window.
@@ -48,6 +50,10 @@ local remembered     -- the Blizzard tab that was selected when our panel opened
 local hiddenChatBar  -- the chat's scroll bar, while our panel hides it
 local faded = {}     -- [Blizzard frame] = its alpha, while our panel hides it
 local buttons = {}
+-- The subtabs: their list mode (OrderList), nil for the professions.
+local SUBTABS = { "professions", "pending", "open", "mine" }
+local selected = 1
+local craftableOnly = true  -- the order list's filter
 
 -- Profession buttons ------------------------------------------------------------
 
@@ -191,7 +197,7 @@ local function LayOutSection(title, list, byLine, index, y)
     y = y + 20
     for i, profession in ipairs(list) do
         index = index + 1
-        local button = buttons[index] or CreateProfessionButton(page.Content)
+        local button = buttons[index] or CreateProfessionButton(page.Professions)
         buttons[index] = button
         local column, row = (i - 1) % COLUMNS, math.floor((i - 1) / COLUMNS)
         button:ClearAllPoints()
@@ -202,10 +208,7 @@ local function LayOutSection(title, list, byLine, index, y)
     return index, y + rows * (BUTTON_HEIGHT + BUTTON_GAP) + 4
 end
 
-local function RefreshPage()
-    if not page or not page:IsShown() then
-        return
-    end
+local function RefreshProfessions()
     local byLine = ns.Data.GuildRecipes(ns.Data.CurrentGuild(false))
     local primary, secondary = Sections(byLine)
     local index, y = LayOutSection(page.PrimaryTitle, primary, byLine, 0, 10)
@@ -213,6 +216,73 @@ local function RefreshPage()
     for i = index + 1, #buttons do
         buttons[i]:Hide()
     end
+end
+
+-- The subtabs' names, with how many orders wait for us.
+local function UpdateSubTabs()
+    local waiting, mine = ns.OrderList.WaitingForMe(), ns.OrderList.WaitingOnMine()
+    local texts = {
+        L["Professions"],
+        waiting > 0 and ("%s (%d)"):format(L["Pending orders"], waiting) or L["Pending orders"],
+        L["Order list"],
+        mine > 0 and ("%s (%d)"):format(L["Requested orders"], mine) or L["Requested orders"],
+    }
+    for i, subtab in ipairs(page.SubTabs.Tabs) do
+        subtab:SetText(texts[i])
+        PanelTemplates_TabResize(subtab, 0)
+    end
+    PanelTemplates_SetTab(page.SubTabs, selected)
+end
+
+local function RefreshPage()
+    if not page or not page:IsShown() then
+        return
+    end
+    UpdateSubTabs()
+    local mode = SUBTABS[selected]
+    local professions = mode == "professions"
+    page.Professions:SetShown(professions)
+    page.Hint:SetShown(professions)
+    page.Orders:SetShown(not professions)
+    page.Craftable:SetShown(mode == "open")
+    page.Craftable.Label:SetShown(mode == "open")
+    if professions then
+        RefreshProfessions()
+    else
+        ns.OrderList.Show(page.Orders, mode, craftableOnly)
+    end
+end
+
+local function SelectSubTab(index)
+    if SOUNDKIT and SOUNDKIT.IG_CHARACTER_INFO_TAB then
+        PlaySound(SOUNDKIT.IG_CHARACTER_INFO_TAB)
+    end
+    selected = index
+    RefreshPage()
+end
+
+-- Above the window's inset, where Guild Info has its headings: the
+-- subtabs, as the game's panels have them on top.
+local function CreateSubTabs()
+    local holder = CreateFrame("Frame", nil, page)
+    holder:SetAllPoints(page.Content)
+    local tabs = {}
+    for i in ipairs(SUBTABS) do
+        local subtab = CreateFrame("Button", nil, holder, "PanelTopTabButtonTemplate")
+        subtab:SetID(i)
+        if i == 1 then
+            subtab:SetPoint("BOTTOMLEFT", page.Content, "TOPLEFT", 4, -2)
+        else
+            subtab:SetPoint("LEFT", tabs[i - 1], "RIGHT", 2, 0)
+        end
+        subtab:SetScript("OnClick", function(self)
+            SelectSubTab(self:GetID())
+        end)
+        tabs[i] = subtab
+    end
+    holder.Tabs = tabs
+    PanelTemplates_SetNumTabs(holder, #tabs)
+    page.SubTabs = holder
 end
 
 -- The panel ------------------------------------------------------------------------
@@ -318,18 +388,44 @@ local function CreatePage()
     page.Content:SetPoint("TOPLEFT", communities.CommunitiesList, "TOPRIGHT", 24, -40)
     page.Content:SetPoint("BOTTOMRIGHT", communities, "BOTTOMRIGHT", -12, 30)
 
-    -- Above the inset, where Guild Info has its headings.
-    page.Hint = page:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-    page.Hint:SetPoint("LEFT", page.Content, "TOPLEFT", 4, 20)
-    page.Hint:SetText(L["Choose a profession to see every recipe your guild knows."])
-    page.PrimaryTitle = page.Content:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    page.Professions = CreateFrame("Frame", nil, page.Content)
+    page.Professions:SetAllPoints()
+    page.PrimaryTitle = page.Professions:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     page.PrimaryTitle:SetText(L["Primary professions"])
-    page.SecondaryTitle = page.Content:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    page.SecondaryTitle = page.Professions:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     page.SecondaryTitle:SetText(L["Secondary professions"])
+    page.Orders = ns.OrderList.Create(page.Content)
+    ns.OrderList.onChange = RefreshPage
+    CreateSubTabs()
+
+    -- Under the inset, where Guild Info has its buttons: a hint, or the
+    -- order list's filter.
+    page.Hint = page:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    page.Hint:SetPoint("LEFT", page.Content, "BOTTOMLEFT", 4, -15)
+    page.Hint:SetText(L["Choose a profession to see every recipe your guild knows."])
+    page.Craftable = CreateFrame("CheckButton", nil, page, "UICheckButtonTemplate")
+    page.Craftable:SetSize(22, 22)
+    page.Craftable:SetPoint("LEFT", page.Content, "BOTTOMLEFT", 0, -15)
+    page.Craftable:SetChecked(craftableOnly)
+    page.Craftable:SetScript("OnClick", function(self)
+        craftableOnly = self:GetChecked() == true
+        RefreshPage()
+    end)
+    page.Craftable.Label = page:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    page.Craftable.Label:SetPoint("LEFT", page.Craftable, "RIGHT", 2, 0)
+    page.Craftable.Label:SetText(L["Only orders I can make"])
     page:Hide()
 end
 
 -- The tab ---------------------------------------------------------------------------
+
+-- Blizzard's notification mark, as its Roster tab shows for applicants:
+-- while some order waits for us to act.
+local function UpdateBadge()
+    if tab then
+        tab.Badge:SetShown(ns.OrderList.WaitingForMe() + ns.OrderList.WaitingOnMine() > 0)
+    end
+end
 
 -- Runs after Blizzard lays out its tabs. Ours goes under the lowest one,
 -- and only while Guild Info shows: on the guild, in the views with tabs.
@@ -362,6 +458,10 @@ local function Setup()
     tab:SetFrameLevel(TAB_LEVEL)
     tab.Icon:SetTexture(ICON)
     tab.tooltip = L["Recipes & Orders"]
+    tab.Badge = tab:CreateTexture(nil, "OVERLAY")
+    tab.Badge:SetAtlas("communities-icon-notification", true)
+    tab.Badge:SetPoint("CENTER", tab, "TOPRIGHT", 0, 0)
+    tab.Badge:Hide()
     -- After the template's own click (its sound, and marking itself).
     tab:HookScript("OnClick", ShowPage)
     tab:Hide()
@@ -374,11 +474,13 @@ local function Setup()
         HidePage(true)
     end)
     ns.On("DataChanged", function()
-        if page:IsShown() then
-            ns.Debounce("GuildTabRefresh", 0.3, RefreshPage)
-        end
+        ns.Debounce("GuildTabRefresh", 0.3, function()
+            UpdateBadge()
+            RefreshPage()
+        end)
     end)
     Update()
+    UpdateBadge()
 end
 
 function GuildTab.Init()

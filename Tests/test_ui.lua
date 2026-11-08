@@ -2,100 +2,8 @@ local H = ...
 
 local GUILD = "Test Guild"
 
--- A stand-in for Blizzard's roster: a member list with rows for every
--- roster member, a column display with six headers.
-local function FakeCommunities(client)
-    local world = client.world
-    local frame = H.NewObject(client, "Frame")
-    local list = H.NewObject(client, "Frame")
-    rawset(frame, "MemberList", list)
-    rawset(frame, "IsVisible", function()
-        return true
-    end)
-    list.expandedDisplay = true
-    rawset(list, "GetSelectedClubInfo", function()
-        return { clubType = 2 }
-    end)
-    rawset(list, "GetGuildColumnIndex", function()
-        return list.guildColumnIndex
-    end)
-    rawset(list, "RefreshLayout", function() end)
-    list.ColumnDisplay = H.NewObject(client, "Frame")
-    local headers = {}
-    for i = 1, 6 do
-        local header = H.NewObject(client, "Button")
-        rawset(header, "GetID", function()
-            return i
-        end)
-        rawset(header, "SetPoint", function(self, ...)
-            self._lastPoint = { ... }
-        end)
-        headers[i] = header
-    end
-    list.ColumnDisplay.columnHeaders = {
-        EnumerateActive = function()
-            local i = 0
-            return function()
-                i = i + 1
-                return headers[i]
-            end
-        end,
-    }
-    list.headers = headers
-    list.columnInfo = { {}, {}, {}, {}, {}, {} }
-    local rows = {}
-    for _, member in ipairs(world.roster) do
-        local row = H.NewObject(client, "Button")
-        row.expanded = true
-        row.isInvitation = false
-        row.memberInfo = { guid = member.guid, name = member.short }
-        rawset(row, "GetMemberInfo", function(self)
-            return self.memberInfo
-        end)
-        rawset(row, "RefreshExpandedColumns", function() end)
-        row.ProfessionHeader = H.NewObject(client, "Frame")
-        row.ProfessionHeader:Hide()
-        row.FactionButton = H.NewObject(client, "Button")
-        row.FactionButton:Hide()
-        row.Rank = H.NewObject(client, "FontString")
-        row.Note = H.NewObject(client, "FontString")
-        rawset(row.Note, "SetPoint", function(self, point, relative)
-            self._right = relative
-        end)
-        rows[#rows + 1] = row
-    end
-    list.rows = rows
-    -- Blizzard's side tabs, as for a guild without benefits.
-    for _, key in ipairs({ "ChatTab", "RosterTab", "GuildBenefitsTab", "GuildInfoTab", "GuildPreferredPlaySettingsTab" }) do
-        frame[key] = H.NewObject(client, "CheckButton")
-    end
-    frame.GuildBenefitsTab:Hide()
-    frame.GuildPreferredPlaySettingsTab:Hide()
-    rawset(frame, "UpdateCommunitiesTabs", function() end)
-    -- Its view ("Roster", "Chat"...), and the tab marked for it. Like the
-    -- game's, setting the same view again does nothing.
-    frame.CommunitiesList = H.NewObject(client, "Frame")
-    frame.Chat = H.NewObject(client, "Frame")
-    frame.Chat.ScrollBar = H.NewObject(client, "EventFrame")
-    frame.displayMode = "Roster"
-    frame.RosterTab:SetChecked(true)
-    rawset(frame, "SetDisplayMode", function(self, mode)
-        if self.displayMode == mode then
-            return
-        end
-        self.displayMode = mode
-        for _, key in ipairs({ "ChatTab", "RosterTab", "GuildBenefitsTab", "GuildInfoTab", "GuildPreferredPlaySettingsTab" }) do
-            self[key]:SetChecked(key == mode .. "Tab")
-        end
-    end)
-    list.ScrollBox = H.NewObject(client, "Frame")
-    rawset(list.ScrollBox, "ForEachFrame", function(_, fn)
-        for _, row in ipairs(rows) do
-            fn(row)
-        end
-    end)
-    return frame
-end
+local FakeCommunities = H.FakeCommunities
+
 
 local function ChildrenOf(client, parent)
     local children = {}
@@ -237,7 +145,7 @@ H.check(communities.CommunitiesList:GetAlpha() == 1, "but not the communities li
 H.check(panel._shown and guildTab._checked and not communities.RosterTab._checked, "clicking the tab shows its panel, marked as the selected tab")
 H.check(not chatBar._shown, "the chat's scroll bar, drawn above the whole window, is hidden meanwhile")
 local professionButtons = {}
-for _, child in ipairs(ChildrenOf(A, panel.Content)) do
+for _, child in ipairs(ChildrenOf(A, panel.Professions)) do
     if child._type == "Button" and child._shown then
         professionButtons[child.skillLine] = child
     end
@@ -277,7 +185,7 @@ A.ns.Viewer.OpenMember(A.guid, 171)
 
 H.section("UI: recipe window")
 local order = viewer.OrderButton
-H.check(order ~= nil and order._enabled == false and order._text == "Request an order (coming soon)", "a disabled crafting order button")
+H.check(order ~= nil and order._enabled == true and order._text == "Request an order", "a crafting order button for the selected recipe")
 H.check(viewer.CreateButton == nil and viewer.CreateAllButton == nil and viewer.CreateMultipleInputBox == nil, "instead of the game's crafting controls")
 local provider = viewer.ScrollBox._provider
 local elements = provider and provider.elements or {}

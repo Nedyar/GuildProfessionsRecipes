@@ -22,7 +22,8 @@ local Pack = ns.Pack
 local Comm = {}
 ns.Comm = Comm
 
-local PROTOCOL = "2"         -- 2: members known by GUID (version 0.2)
+local PROTOCOL = "3"         -- 3: records carry crafting orders (version 0.8)
+local LEGACY = "2"           -- 2: members known by GUID (0.2 to 0.7), still read
 local PROBE = "0"            -- test messages of /grecipes probe
 local HEADER = 6
 local CHUNK = 255 - HEADER
@@ -347,7 +348,8 @@ local function EnsureCleanup()
     end
 end
 
-local function Deliver(sender, channel, compressed, body)
+-- protocol: the one the message came in, as a number (2 or 3).
+local function Deliver(sender, channel, compressed, body, protocol)
     local raw = FromBase64(body)
     if raw and compressed then
         raw = Decompress(raw)
@@ -357,7 +359,7 @@ local function Deliver(sender, channel, compressed, body)
         return
     end
     if Comm.handler then
-        local ok, err = pcall(Comm.handler, raw, sender, channel)
+        local ok, err = pcall(Comm.handler, raw, sender, channel, protocol)
         if not ok then
             ns.Debug("bad message from %s: %s", sender, tostring(err))
         end
@@ -372,7 +374,7 @@ local function OnChunk(text, channel, sender)
         end
         return
     end
-    if protocol ~= PROTOCOL then
+    if protocol ~= PROTOCOL and protocol ~= LEGACY then
         if not newerProtocolNoticed and protocol > PROTOCOL then
             newerProtocolNoticed = true
             ns.Print(ns.L["a guild member uses a newer version of Guild Professions & Recipes that this one cannot talk to. Please update."])
@@ -389,6 +391,7 @@ local function OnChunk(text, channel, sender)
         return
     end
     local id = high * 64 + low
+    local version = tonumber(protocol)
     local seenKey = sender .. "|" .. id
     local seenAt = seenMessages[seenKey]
     if seenAt and GetTime() - seenAt < DUPLICATE_WINDOW then
@@ -399,7 +402,7 @@ local function OnChunk(text, channel, sender)
         seenMessages[seenKey] = GetTime()
         EnsureCleanup()
         C_Timer.After(0, function()
-            Deliver(sender, channel, flag == "z", data)
+            Deliver(sender, channel, flag == "z", data, version)
         end)
         return
     end
@@ -419,7 +422,7 @@ local function OnChunk(text, channel, sender)
         if count >= MAX_PENDING_PER_SENDER or bytes > MAX_PENDING_BYTES then
             return
         end
-        message = { parts = {}, got = 0, last = last, compressed = flag == "z", bytes = 0 }
+        message = { parts = {}, got = 0, last = last, compressed = flag == "z", bytes = 0, version = version }
         messages[id] = message
         EnsureCleanup()
     end
@@ -435,7 +438,7 @@ local function OnChunk(text, channel, sender)
         seenMessages[seenKey] = GetTime()
         local body = table.concat(message.parts)
         C_Timer.After(0, function()
-            Deliver(sender, channel, message.compressed, body)
+            Deliver(sender, channel, message.compressed, body, message.version)
         end)
     end
 end

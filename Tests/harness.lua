@@ -8,7 +8,7 @@ H.FILES = {
     "Locales/Locales.lua", "Locales/deDE.lua", "Locales/esES.lua", "Locales/esMX.lua", "Locales/frFR.lua",
     "Locales/itIT.lua", "Locales/koKR.lua", "Locales/ptBR.lua", "Locales/ruRU.lua", "Locales/zhCN.lua", "Locales/zhTW.lua",
     "Core.lua", "Pack.lua", "Data.lua", "Comm.lua", "Roster.lua", "Scanner.lua",
-    "Sync.lua", "RosterColumn.lua", "GuildTab.lua", "Viewer.lua", "Probe.lua",
+    "Sync.lua", "Orders.lua", "RosterColumn.lua", "GuildTab.lua", "Viewer.lua", "OrderForm.lua", "OrderList.lua", "Probe.lua",
 }
 
 -- Assertions ------------------------------------------------------------------
@@ -241,9 +241,9 @@ H.NoOpMethods = {}
 for name in ([[AddLine ClearAllPoints EnableMouse HighlightText RegisterForClicks RegisterForDrag SetAllPoints
     SetAlpha SetAutoFocus SetClampedToScreen SetColorTexture SetDesaturated SetElementExtent SetEnabled SetFocus
     SetFontObject SetFrameStrata SetHeight SetHighlightTexture SetID SetItemByID SetJustifyH SetMinMaxValues
-    SetMotionScriptsWhileDisabled SetMovable SetMultiLine SetOwner SetPoint SetPortraitToAsset SetScrollChild
+    SetHitRectInsets SetMovable SetMultiLine SetOwner SetPoint SetPortraitToAsset SetScrollChild
     SetSize SetSpacing SetSpellByID SetStatusBarColor SetStatusBarTexture SetTexCoord SetTexture SetTitle
-    SetToplevel SetValue SetWidth SetWordWrap StartMoving StopMovingOrSizing SetMaxLetters SetMaxBytes
+    SetToplevel SetValue SetWidth SetWordWrap StartMoving StopMovingOrSizing SetMaxLetters SetMaxBytes SetNumeric ClearFocus
     SetDataProvider SetElementInitializer SetElementExtentCalculator SetFrameLevel AddMaskTexture SetAtlas
     SetBlendMode SetTextColor SetVertexColor IsTruncated SetFillToInterior SetChecked]]):gmatch("%a+") do
     H.NoOpMethods[name] = true
@@ -252,6 +252,8 @@ end
 -- Regions that Blizzard's templates give a frame, by template.
 H.TemplateRegions = {
     CircularGiantItemButtonTemplate = { Icon = "Texture", IconBorder = "Texture", Count = "FontString" },
+    InputBoxInstructionsTemplate = { Instructions = "FontString" },
+    InputScrollFrameTemplate = { EditBox = "EditBox", CharCount = "FontString" },
     LargeSideTabButtonTemplate = { Background = "Texture", Icon = "Texture", SelectedTexture = "Texture" },
     RightSideTabTemplate = { Icon = "Texture", IconOverlay = "Texture" },
 }
@@ -320,6 +322,17 @@ H.FrameMethods = {
     GetTextWidth = function(self)
         return 6 * #(self._text or "")
     end,
+    GetStringWidth = function(self)
+        return 6 * #(self._text or "")
+    end,
+    -- Whether a disabled button still shows its tooltip, and an edit box's
+    -- text insets, for the tests to check.
+    SetMotionScriptsWhileDisabled = function(self, on)
+        self._motionWhileDisabled = on and true or false
+    end,
+    SetTextInsets = function(self, left, right, top, bottom)
+        self._insets = { left, right, top, bottom }
+    end,
     GetFrameLevel = function()
         return 1
     end,
@@ -341,6 +354,12 @@ H.FrameMethods = {
     end,
     SetScale = function(self, scale)
         self._scale = scale
+    end,
+    SetID = function(self, id)
+        self._id = id
+    end,
+    GetID = function(self)
+        return self._id or 0
     end,
     GetAlpha = function(self)
         return self._alpha or 1
@@ -364,6 +383,101 @@ H.FrameMethods = {
         self._resetShown = not self._isDefault()
     end,
 }
+
+-- A stand-in for Blizzard's guild window (CommunitiesFrame): a member list with rows for every
+-- roster member, a column display with six headers.
+function H.FakeCommunities(client)
+    local world = client.world
+    local frame = H.NewObject(client, "Frame")
+    local list = H.NewObject(client, "Frame")
+    rawset(frame, "MemberList", list)
+    rawset(frame, "IsVisible", function()
+        return true
+    end)
+    list.expandedDisplay = true
+    rawset(list, "GetSelectedClubInfo", function()
+        return { clubType = 2 }
+    end)
+    rawset(list, "GetGuildColumnIndex", function()
+        return list.guildColumnIndex
+    end)
+    rawset(list, "RefreshLayout", function() end)
+    list.ColumnDisplay = H.NewObject(client, "Frame")
+    local headers = {}
+    for i = 1, 6 do
+        local header = H.NewObject(client, "Button")
+        rawset(header, "GetID", function()
+            return i
+        end)
+        rawset(header, "SetPoint", function(self, ...)
+            self._lastPoint = { ... }
+        end)
+        headers[i] = header
+    end
+    list.ColumnDisplay.columnHeaders = {
+        EnumerateActive = function()
+            local i = 0
+            return function()
+                i = i + 1
+                return headers[i]
+            end
+        end,
+    }
+    list.headers = headers
+    list.columnInfo = { {}, {}, {}, {}, {}, {} }
+    local rows = {}
+    for _, member in ipairs(world.roster) do
+        local row = H.NewObject(client, "Button")
+        row.expanded = true
+        row.isInvitation = false
+        row.memberInfo = { guid = member.guid, name = member.short }
+        rawset(row, "GetMemberInfo", function(self)
+            return self.memberInfo
+        end)
+        rawset(row, "RefreshExpandedColumns", function() end)
+        row.ProfessionHeader = H.NewObject(client, "Frame")
+        row.ProfessionHeader:Hide()
+        row.FactionButton = H.NewObject(client, "Button")
+        row.FactionButton:Hide()
+        row.Rank = H.NewObject(client, "FontString")
+        row.Note = H.NewObject(client, "FontString")
+        rawset(row.Note, "SetPoint", function(self, point, relative)
+            self._right = relative
+        end)
+        rows[#rows + 1] = row
+    end
+    list.rows = rows
+    -- Blizzard's side tabs, as for a guild without benefits.
+    for _, key in ipairs({ "ChatTab", "RosterTab", "GuildBenefitsTab", "GuildInfoTab", "GuildPreferredPlaySettingsTab" }) do
+        frame[key] = H.NewObject(client, "CheckButton")
+    end
+    frame.GuildBenefitsTab:Hide()
+    frame.GuildPreferredPlaySettingsTab:Hide()
+    rawset(frame, "UpdateCommunitiesTabs", function() end)
+    -- Its view ("Roster", "Chat"...), and the tab marked for it. Like the
+    -- game's, setting the same view again does nothing.
+    frame.CommunitiesList = H.NewObject(client, "Frame")
+    frame.Chat = H.NewObject(client, "Frame")
+    frame.Chat.ScrollBar = H.NewObject(client, "EventFrame")
+    frame.displayMode = "Roster"
+    frame.RosterTab:SetChecked(true)
+    rawset(frame, "SetDisplayMode", function(self, mode)
+        if self.displayMode == mode then
+            return
+        end
+        self.displayMode = mode
+        for _, key in ipairs({ "ChatTab", "RosterTab", "GuildBenefitsTab", "GuildInfoTab", "GuildPreferredPlaySettingsTab" }) do
+            self[key]:SetChecked(key == mode .. "Tab")
+        end
+    end)
+    list.ScrollBox = H.NewObject(client, "Frame")
+    rawset(list.ScrollBox, "ForEachFrame", function(_, fn)
+        for _, row in ipairs(rows) do
+            fn(row)
+        end
+    end)
+    return frame
+end
 
 -- A menu description that records its entries: checkboxes, and buttons
 -- with their submenu entries in .entries.
@@ -761,7 +875,7 @@ function World:MakeEnv(client)
     end
     api.C_AddOns = {
         GetAddOnMetadata = function()
-            return "0.1.0"
+            return "0.8.0"
         end,
     }
     api.GetLocale = function()
@@ -1067,6 +1181,9 @@ function World:MakeEnv(client)
     api.PanelTemplates_SetNumTabs = function() end
     api.PanelTemplates_UpdateTabs = function() end
     api.PanelTemplates_TabResize = function() end
+    api.PanelTemplates_SetTab = function(frame, id)
+        frame.selectedTab = id
+    end
     api.Item = {
         CreateFromItemID = function()
             return { ContinueOnItemLoad = function(_, callback) callback() end }
