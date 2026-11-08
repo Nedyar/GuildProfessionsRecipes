@@ -159,7 +159,13 @@ local function RowOnEnter(row)
     if view.order.note ~= "" then
         GameTooltip:AddLine(view.order.note, 0.9, 0.9, 0.9, true)
     end
+    GameTooltip:AddLine(L["Click to see the recipe."], GREEN_FONT_COLOR:GetRGB())
     GameTooltip:Show()
+end
+
+-- The recipe window on the order's recipe, among the guild's.
+local function ShowRecipe(view)
+    ns.Viewer.OpenGuild(view.order.sl, view.order.r)
 end
 
 local function ButtonOnEnter(button)
@@ -174,7 +180,8 @@ local function CreateRow(row)
     row.Icon = row:CreateTexture(nil, "ARTWORK")
     row.Icon:SetSize(36, 36)
     row.Icon:SetPoint("LEFT", 8, 0)
-    -- Over the icon, what the order makes, as in the recipe window.
+    -- Over the icon, what the order makes, as in the recipe window; a click
+    -- shows the recipe, as on the row, and shift-click links it.
     row.Item = CreateFrame("Button", nil, row)
     row.Item:SetAllPoints(row.Icon)
     row.Item:SetScript("OnEnter", function(self)
@@ -184,8 +191,12 @@ local function CreateRow(row)
     end)
     row.Item:SetScript("OnLeave", GameTooltip_Hide)
     row.Item:SetScript("OnClick", function()
-        if row.view and IsModifiedClick("CHATLINK") then
+        if not row.view then
+            return
+        elseif IsModifiedClick("CHATLINK") then
             ns.Viewer.LinkRecipe(row.view.order.r)
+        else
+            ShowRecipe(row.view)
         end
     end)
     row.Title =row:CreateFontString(nil, "ARTWORK", "GameFontNormal")
@@ -228,6 +239,12 @@ local function CreateRow(row)
     row:EnableMouse(true)
     row:SetScript("OnEnter", RowOnEnter)
     row:SetScript("OnLeave", GameTooltip_Hide)
+    -- A click on the row (its buttons take their own) shows the recipe.
+    row:SetScript("OnMouseUp", function(self, mouseButton)
+        if mouseButton == "LeftButton" and self.view and self:IsMouseOver() then
+            ShowRecipe(self.view)
+        end
+    end)
 end
 
 local function InitRow(row, data)

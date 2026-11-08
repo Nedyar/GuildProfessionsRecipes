@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.8.2 - From an order to its recipe
+
+- **Click an order** in any of the order lists, or its icon, to open its recipe in the recipe window. It shows among your guild's recipes, selected and in view, with its reagents and who knows it.
+- Shift-click on an order's icon still links the recipe in chat.
+
 ## 0.8.1 - Hide my orders
 
 - **Hide my orders**: a second filter in the Order list, ticked by default. It hides the open orders placed by any of your characters. Untick it to see them: your other characters can accept them, but not the one that placed them.

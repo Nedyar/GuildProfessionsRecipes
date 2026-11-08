@@ -1312,14 +1312,16 @@ function Viewer.OpenMember(guid, skillLine)
 end
 
 -- Opens the window on every recipe of a profession that the guild's
--- members have shared (the Recipes & Orders tab).
-function Viewer.OpenGuild(skillLine)
+-- members have shared (the Recipes & Orders tab). recipeID (optional): the
+-- recipe to select and scroll to, as for an order, if the guild knows it.
+function Viewer.OpenGuild(skillLine, recipeID)
     local guild = ns.Data.CurrentGuild(false)
     if not guild then
         ns.Print(L["you are not in a guild (or the guild has not loaded yet)."])
         return
     end
-    if not ns.Data.GuildRecipes(guild)[skillLine] then
+    local prof = ns.Data.GuildRecipes(guild)[skillLine]
+    if not prof then
         return
     end
     if not frame then
@@ -1329,9 +1331,21 @@ function Viewer.OpenGuild(skillLine)
         state.recipeID = nil
     end
     state.guild, state.key, state.skillLine = true, nil, skillLine
+    local wanted = recipeID ~= nil and Contains(prof.k, recipeID)
+    if wanted then
+        state.recipeID = recipeID
+        -- Its group open, so it is in the list.
+        collapsed[(GroupOf(recipeID, ResolveRecipe(recipeID)))] = nil
+    end
     ShowCleanSearch()
     frame:Show()
     Refresh()
+    if wanted and frame.ScrollBox.ScrollToElementDataByPredicate then
+        local constants = ScrollBoxConstants or {}
+        frame.ScrollBox:ScrollToElementDataByPredicate(function(data)
+            return data.recipeID == recipeID
+        end, constants.AlignCenter, constants.NoScrollInterpolation)
+    end
 end
 
 -- A profession clicked in the roster: ours in the game's own window, a

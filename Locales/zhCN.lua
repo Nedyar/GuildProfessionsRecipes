@@ -131,6 +131,7 @@ ns.RegisterLocale("zhCN", function(L)
     L["Only orders I can make"] = "只显示我能制作的"
     L["Hide my orders"] = "隐藏我的订单"
     L["This is your own order."] = "这是你自己的订单。"
+    L["Click to see the recipe."] = "点击查看配方。"
     L["%s asks you for a personal order: %s."] = "%s向你申请了个人订单：%s。"
     L["%s accepted your order: %s."] = "%s接受了你的订单：%s。"
     L["%s declined your order: %s."] = "%s拒绝了你的订单：%s。"

@@ -444,6 +444,24 @@ do
         and rows[1].Payment._text:find("Materials provided", 1, true) and rows[1].Payment._text:find("Soon if you can", 1, true),
         "a row says what, how many, from whom and how it is paid")
 
+    -- A click on a row, or on its icon, shows its recipe among the guild's:
+    -- selected and scrolled to, its group opened even if it was closed.
+    alice.ns.Viewer.OpenGuild(197)
+    local viewer = alice.env.GuildProfessionsRecipesViewer
+    for _, element in ipairs(viewer.ScrollBox._provider.elements) do
+        if element.header then
+            local header = H.NewObject(alice, "Button")
+            viewer.ScrollBox._view.init(header, element)
+            header._scripts.OnClick(header)
+        end
+    end
+    rows[3]._scripts.OnMouseUp(rows[3], "LeftButton")
+    local scrolled = viewer.ScrollBox._scrolledTo
+    H.check(viewer._shown and scrolled and scrolled.recipeID == 22 and (viewer.Detail.Name._text or ""):find("Item100022", 1, true),
+        "a click on an order shows its recipe, selected and scrolled to")
+    rows[1].Item._scripts.OnClick(rows[1].Item)
+    H.eq(viewer.ScrollBox._scrolledTo and viewer.ScrollBox._scrolledTo.recipeID, 21, "so does a click on its icon")
+
     local bobPanel = Panel(bob)
     Select(bobPanel, 3)
     H.eq(Count(Rows(bob, bobPanel)), 1, "Bob's list, filtered: only what he can make")

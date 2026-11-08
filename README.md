@@ -42,6 +42,8 @@ professions and recipes of every member of your guild.
     default); add a note.
   - The crafter marks it completed, then you mark it finished. A crafter
     who cannot make it after all releases it, and it is open again.
+  - Clicking an order in a list shows its recipe among the guild's in the
+    recipe window, with its reagents and who knows it.
   - You are told in the chat when an order is directed to you or when one of
     yours is accepted, declined, completed, released or expires, also of
     changes made while you were offline. Blizzard's notification mark shows

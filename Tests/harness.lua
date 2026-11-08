@@ -325,6 +325,10 @@ H.FrameMethods = {
     GetStringWidth = function(self)
         return 6 * #(self._text or "")
     end,
+    -- Clicks in the tests land where they are aimed.
+    IsMouseOver = function()
+        return true
+    end,
     -- Whether a disabled button still shows its tooltip, and an edit box's
     -- text insets, for the tests to check.
     SetMotionScriptsWhileDisabled = function(self, on)
@@ -1169,6 +1173,16 @@ function World:MakeEnv(client)
             rawset(scrollBox, "_view", view)
             rawset(scrollBox, "SetDataProvider", function(self, provider)
                 self._provider = provider
+            end)
+            -- The element scrolled to, for the tests to check.
+            rawset(scrollBox, "ScrollToElementDataByPredicate", function(self, predicate)
+                self._scrolledTo = nil
+                for _, element in ipairs(self._provider and self._provider.elements or {}) do
+                    if predicate(element) then
+                        self._scrolledTo = element
+                        return
+                    end
+                end
             end)
         end,
         AddAcquiredFrameCallback = function(scrollBox, callback, owner)

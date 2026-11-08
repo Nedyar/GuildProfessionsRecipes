@@ -131,6 +131,7 @@ ns.RegisterLocale("esES", function(L)
     L["Only orders I can make"] = "Solo los que puedo hacer"
     L["Hide my orders"] = "Ocultar mis encargos"
     L["This is your own order."] = "Este encargo es tuyo."
+    L["Click to see the recipe."] = "Haz clic para ver la receta."
     L["%s asks you for a personal order: %s."] = "%s te pide un encargo personal: %s."
     L["%s accepted your order: %s."] = "%s ha aceptado tu encargo: %s."
     L["%s declined your order: %s."] = "%s ha rechazado tu encargo: %s."
