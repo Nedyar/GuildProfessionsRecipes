@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.8.1 - Hide my orders
+
+- **Hide my orders**: a second filter in the Order list, ticked by default. It hides the open orders placed by any of your characters. Untick it to see them: your other characters can accept them, but not the one that placed them.
+- The filters' labels can be clicked too, not only their boxes.
+
 ## 0.8.0 - Crafting orders
 
 - **Members on 0.7 must update.** Messages between players changed to carry orders. Version 0.8 still reads what 0.7 sends, but 0.7 cannot read 0.8. Until they update, members on 0.7 see a "newer version" notice and stop getting your changes.

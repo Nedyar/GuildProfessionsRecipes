@@ -129,6 +129,7 @@ do
     H.eq(StateOf(alice, carol, 1), "pending", "it reaches the guild within seconds")
     H.eq(#alice.ns.Orders.Open(Guild(alice), true), 1, "in Alice's list of orders she can make")
     H.eq(#carol.ns.Orders.Open(Guild(carol)), 0, "not in Carol's own open list")
+    H.eq(#carol.ns.Orders.Open(Guild(carol), false, true), 1, "unless she asks to see hers")
     H.eq(#carol.ns.Orders.Mine(Guild(carol)), 1, "but in her requested orders")
     H.check(carol.ns.Orders.Accept(carol.guid, 1) == nil, "Carol cannot take her own order")
 
@@ -434,7 +435,8 @@ do
     H.eq(#alicePanel.SubTabs.Tabs, 4, "four subtabs")
     H.check(alicePanel.Professions._shown and not alicePanel.Orders._shown, "Professions first")
     Select(alicePanel, 3)
-    H.check(alicePanel.Orders._shown and not alicePanel.Professions._shown and alicePanel.Craftable._shown, "the order list, with its filter")
+    H.check(alicePanel.Orders._shown and not alicePanel.Professions._shown and alicePanel.Craftable._shown
+        and alicePanel.HideMine._shown and alicePanel.HideMine._checked, "the order list, with its two filters, both ticked")
     local rows = Rows(alice, alicePanel)
     H.check(Count(rows) == 2 and rows[1] and rows[3], "Alice's list: the two open orders, not Bob's personal one")
     H.eq(Buttons(rows[1]), "Accept", "she can accept them")
@@ -492,6 +494,27 @@ do
     rows = Rows(carol, carolPanel)
     H.check(Count(rows) == 2 and rows[1].State._text == "Finished", "the cancelled one leaves Carol's list")
     H.check(ViewOf(alice, carol, cancelledID) == nil and ViewOf(bob, carol, cancelledID) == nil, "and everyone else's")
+
+    -- Hide my orders, in the order list.
+    Select(carolPanel, 3)
+    carolPanel.Craftable:SetChecked(false)
+    carolPanel.Craftable._scripts.OnClick(carolPanel.Craftable)
+    H.eq(Count(Rows(carol, carolPanel)), 0, "Carol's own open order is hidden")
+    carolPanel.HideMine:SetChecked(false)
+    carolPanel.HideMine._scripts.OnClick(carolPanel.HideMine)
+    rows = Rows(carol, carolPanel)
+    H.check(Count(rows) == 1 and Buttons(rows[3]) == "Accept (off)" and rows[3].buttons[1].reason == "This is your own order.",
+        "unticked, it shows, and she cannot accept it")
+    -- Were Carol another character of Alice's account, Alice's list would
+    -- hide it too, and let her take it once unticked.
+    alice.ns.db.own[carol.guid] = { hinted = {} }
+    Select(alicePanel, 3)
+    H.eq(Count(Rows(alice, alicePanel)), 0, "an order of another of our characters is hidden too")
+    alicePanel.HideMine:SetChecked(false)
+    alicePanel.HideMine._scripts.OnClick(alicePanel.HideMine)
+    rows = Rows(alice, alicePanel)
+    H.check(Count(rows) == 1 and Buttons(rows[3]) == "Accept", "unticked, that character can take it")
+    alice.ns.db.own[carol.guid] = nil
     H.eq(#w.errors, 0, "lists: no Lua errors")
     for i = 1, math.min(#w.errors, 5) do
         print(w.errors[i])

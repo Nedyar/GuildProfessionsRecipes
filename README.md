@@ -29,8 +29,8 @@ professions and recipes of every member of your guild.
     says why.
   - **Pending orders:** orders for you, personal ones to accept or decline,
     and those you accepted, to complete or release.
-  - **Order list:** the open orders, by default only those whose recipe you
-    know, to accept.
+  - **Order list:** the open orders, to accept. By default it shows only
+    those whose recipe you know, and hides those of your own characters.
   - **Requested orders:** yours, to modify or cancel while nobody has taken
     them, to finish once completed, and to delete once finished, cancelled
     or expired.

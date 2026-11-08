@@ -129,6 +129,8 @@ ns.RegisterLocale("koKR", function(L)
     L["Order list"] = "주문 목록"
     L["Requested orders"] = "요청한 주문"
     L["Only orders I can make"] = "내가 만들 수 있는 것만"
+    L["Hide my orders"] = "내 주문 숨기기"
+    L["This is your own order."] = "내가 요청한 주문입니다."
     L["%s asks you for a personal order: %s."] = "%s님이 개인 주문을 요청했습니다: %s."
     L["%s accepted your order: %s."] = "%s님이 주문을 수락했습니다: %s."
     L["%s declined your order: %s."] = "%s님이 주문을 거절했습니다: %s."

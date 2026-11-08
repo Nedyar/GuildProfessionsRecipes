@@ -141,6 +141,12 @@ function Orders.CanCraft(order)
     return Knows(Data.GetOwnRecord(false), order.sl, order.r)
 end
 
+-- Whether a character is one of our account's: this one, or another that
+-- has run the addon (the saved data is the account's).
+function Orders.IsOurs(guid)
+    return guid == ns.playerGUID or ns.db.own[guid] ~= nil
+end
+
 -- The members an order can be directed to: those who know the recipe and
 -- run a version with orders, but us. Our account's other characters count
 -- even before they log in again: they load this same addon. Sorted by
@@ -150,7 +156,7 @@ function Orders.Crafters(guild, skillLine, recipeID, text)
     local wanted = text and strtrim(text):lower() or ""
     local list = {}
     for guid, record in pairs(guild and guild.members or {}) do
-        if guid ~= ns.playerGUID and Data.IsShareable(record) and (Orders.CanUse(record) or ns.db.own[guid] ~= nil)
+        if guid ~= ns.playerGUID and Data.IsShareable(record) and (Orders.CanUse(record) or Orders.IsOurs(guid))
                 and Knows(record, skillLine, recipeID) then
             local name = Data.NameOf(guid, record)
             if wanted == "" or name:lower():find(wanted, 1, true) then
@@ -188,11 +194,12 @@ function Orders.ForMe(guild)
     return list
 end
 
--- Open orders anyone may take. craftable: only those we know the recipe of.
-function Orders.Open(guild, craftable)
+-- Open orders anyone may take. craftable: only those we know the recipe
+-- of; showMine: also those of our account's characters, this one included.
+function Orders.Open(guild, craftable, showMine)
     local list = {}
     for _, view in ipairs(Orders.List(guild)) do
-        if view.state == "pending" and view.order.d == nil and view.requester ~= ns.playerGUID
+        if view.state == "pending" and view.order.d == nil and (showMine or not Orders.IsOurs(view.requester))
                 and (not craftable or Orders.CanCraft(view.order)) then
             list[#list + 1] = view
         end

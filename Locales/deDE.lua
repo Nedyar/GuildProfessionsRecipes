@@ -130,6 +130,8 @@ ns.RegisterLocale("deDE", function(L)
     L["Order list"] = "Auftragsliste"
     L["Requested orders"] = "Angefragte Aufträge"
     L["Only orders I can make"] = "Nur die, die ich herstellen kann"
+    L["Hide my orders"] = "Meine Aufträge ausblenden"
+    L["This is your own order."] = "Das ist dein eigener Auftrag."
     L["%s asks you for a personal order: %s."] = "%s bittet dich um einen persönlichen Auftrag: %s."
     L["%s accepted your order: %s."] = "%s hat deinen Auftrag angenommen: %s."
     L["%s declined your order: %s."] = "%s hat deinen Auftrag abgelehnt: %s."

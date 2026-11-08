@@ -129,6 +129,8 @@ ns.RegisterLocale("ruRU", function(L)
     L["Order list"] = "Список заказов"
     L["Requested orders"] = "Запрошенные заказы"
     L["Only orders I can make"] = "Только те, что я могу сделать"
+    L["Hide my orders"] = "Скрыть мои заказы"
+    L["This is your own order."] = "Это ваш собственный заказ."
     L["%s asks you for a personal order: %s."] = "%s просит вас о личном заказе: %s."
     L["%s accepted your order: %s."] = "%s принял ваш заказ: %s."
     L["%s declined your order: %s."] = "%s отклонил ваш заказ: %s."

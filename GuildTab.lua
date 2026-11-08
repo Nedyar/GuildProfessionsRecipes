@@ -53,7 +53,9 @@ local buttons = {}
 -- The subtabs: their list mode (OrderList), nil for the professions.
 local SUBTABS = { "professions", "pending", "open", "mine" }
 local selected = 1
-local craftableOnly = true  -- the order list's filter
+-- The order list's filters.
+local craftableOnly = true
+local hideMine = true
 
 -- Profession buttons ------------------------------------------------------------
 
@@ -244,12 +246,14 @@ local function RefreshPage()
     page.Professions:SetShown(professions)
     page.Hint:SetShown(professions)
     page.Orders:SetShown(not professions)
-    page.Craftable:SetShown(mode == "open")
-    page.Craftable.Label:SetShown(mode == "open")
+    for _, check in ipairs({ page.Craftable, page.HideMine }) do
+        check:SetShown(mode == "open")
+        check.Label:SetShown(mode == "open")
+    end
     if professions then
         RefreshProfessions()
     else
-        ns.OrderList.Show(page.Orders, mode, craftableOnly)
+        ns.OrderList.Show(page.Orders, mode, craftableOnly, not hideMine)
     end
 end
 
@@ -259,6 +263,23 @@ local function SelectSubTab(index)
     end
     selected = index
     RefreshPage()
+end
+
+-- A filter of the order list: a checkbox whose label takes clicks too.
+-- onClick(checked) keeps the new value.
+local function FilterCheck(text, checked, onClick)
+    local check = CreateFrame("CheckButton", nil, page, "UICheckButtonTemplate")
+    check:SetSize(22, 22)
+    check:SetChecked(checked)
+    check.Label = page:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    check.Label:SetPoint("LEFT", check, "RIGHT", 2, 0)
+    check.Label:SetText(text)
+    check:SetHitRectInsets(0, -(check.Label:GetStringWidth() + 2), 0, 0)
+    check:SetScript("OnClick", function(self)
+        onClick(self:GetChecked() == true)
+        RefreshPage()
+    end)
+    return check
 end
 
 -- Above the window's inset, where Guild Info has its headings: the
@@ -399,21 +420,18 @@ local function CreatePage()
     CreateSubTabs()
 
     -- Under the inset, where Guild Info has its buttons: a hint, or the
-    -- order list's filter.
+    -- order list's filters.
     page.Hint = page:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
     page.Hint:SetPoint("LEFT", page.Content, "BOTTOMLEFT", 4, -15)
     page.Hint:SetText(L["Choose a profession to see every recipe your guild knows."])
-    page.Craftable = CreateFrame("CheckButton", nil, page, "UICheckButtonTemplate")
-    page.Craftable:SetSize(22, 22)
-    page.Craftable:SetPoint("LEFT", page.Content, "BOTTOMLEFT", 0, -15)
-    page.Craftable:SetChecked(craftableOnly)
-    page.Craftable:SetScript("OnClick", function(self)
-        craftableOnly = self:GetChecked() == true
-        RefreshPage()
+    page.Craftable = FilterCheck(L["Only orders I can make"], craftableOnly, function(checked)
+        craftableOnly = checked
     end)
-    page.Craftable.Label = page:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-    page.Craftable.Label:SetPoint("LEFT", page.Craftable, "RIGHT", 2, 0)
-    page.Craftable.Label:SetText(L["Only orders I can make"])
+    page.Craftable:SetPoint("LEFT", page.Content, "BOTTOMLEFT", 0, -15)
+    page.HideMine = FilterCheck(L["Hide my orders"], hideMine, function(checked)
+        hideMine = checked
+    end)
+    page.HideMine:SetPoint("LEFT", page.Craftable.Label, "RIGHT", 16, 0)
     page:Hide()
 end
 

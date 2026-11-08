@@ -129,6 +129,8 @@ ns.RegisterLocale("zhTW", function(L)
     L["Order list"] = "訂單列表"
     L["Requested orders"] = "我申請的訂單"
     L["Only orders I can make"] = "只顯示我能製作的"
+    L["Hide my orders"] = "隱藏我的訂單"
+    L["This is your own order."] = "這是你自己的訂單。"
     L["%s asks you for a personal order: %s."] = "%s向你申請了個人訂單：%s。"
     L["%s accepted your order: %s."] = "%s接受了你的訂單：%s。"
     L["%s declined your order: %s."] = "%s拒絕了你的訂單：%s。"

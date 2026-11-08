@@ -122,6 +122,9 @@ local function Actions(view, mode)
             return { { "complete", L["Complete"], true }, { "release", L["Release"], true } }
         end
     elseif mode == "open" then
+        if view.requester == ns.playerGUID then
+            return { { "accept", ACCEPT or "Accept", false, L["This is your own order."] } }
+        end
         local craftable = ns.Orders.CanCraft(view.order)
         return { { "accept", ACCEPT or "Accept", craftable, not craftable and L["You don't know this recipe."] or nil } }
     elseif mode == "mine" then
@@ -281,21 +284,22 @@ function OrderList.Create(parent)
     return list
 end
 
--- The orders a list shows. mode: "pending", "open" or "mine"; craftable:
--- in "open", only those we know the recipe of.
-function OrderList.Views(mode, craftable)
+-- The orders a list shows. mode: "pending", "open" or "mine"; in "open",
+-- craftable: only those we know the recipe of; showMine: also those of our
+-- account's characters.
+function OrderList.Views(mode, craftable, showMine)
     local guild = ns.Data.CurrentGuild(false)
     if mode == "pending" then
         return ns.Orders.ForMe(guild)
     elseif mode == "open" then
-        return ns.Orders.Open(guild, craftable)
+        return ns.Orders.Open(guild, craftable, showMine)
     end
     return ns.Orders.Mine(guild)
 end
 
-function OrderList.Show(list, mode, craftable)
+function OrderList.Show(list, mode, craftable, showMine)
     local elements = {}
-    for _, view in ipairs(OrderList.Views(mode, craftable)) do
+    for _, view in ipairs(OrderList.Views(mode, craftable, showMine)) do
         elements[#elements + 1] = { view = view, mode = mode }
     end
     list.ScrollBox:SetDataProvider(CreateDataProvider(elements), ScrollBoxConstants and ScrollBoxConstants.RetainScrollPosition)
