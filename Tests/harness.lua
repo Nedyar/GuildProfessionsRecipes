@@ -8,7 +8,7 @@ H.FILES = {
     "Locales/Locales.lua", "Locales/deDE.lua", "Locales/esES.lua", "Locales/esMX.lua", "Locales/frFR.lua",
     "Locales/itIT.lua", "Locales/koKR.lua", "Locales/ptBR.lua", "Locales/ruRU.lua", "Locales/zhCN.lua", "Locales/zhTW.lua",
     "Core.lua", "Pack.lua", "Data.lua", "Comm.lua", "Roster.lua", "Scanner.lua",
-    "Sync.lua", "Orders.lua", "RosterColumn.lua", "GuildTab.lua", "Viewer.lua", "OrderForm.lua", "OrderList.lua", "Probe.lua",
+    "Sync.lua", "Orders.lua", "RosterColumn.lua", "GuildTab.lua", "Viewer.lua", "OrderForm.lua", "OrderList.lua", "Deliveries.lua", "Probe.lua",
 }
 
 -- Assertions ------------------------------------------------------------------
@@ -546,6 +546,7 @@ function World:NewClient(name, options)
         inGuild = true,
         lockdown = false,
         saved = options.saved, -- the account's saved variables file
+        inbox = {},            -- { { from = name, items = { { itemID, count } or false... } }... }
     }
     self.clients[#self.clients + 1] = client
     self.roster[#self.roster + 1] = { key = client.key, short = name, class = "MAGE", guid = client.guid, client = client }
@@ -675,6 +676,76 @@ end
 function World:CloseProfession(client)
     client.session = nil
     self:FireEvent(client, "TRADE_SKILL_CLOSE")
+end
+
+-- Trade and mail ------------------------------------------------------------------------
+
+-- A trade between two clients, each putting in items ({ { itemID, count }...
+-- by slot }), with the game's events. options.cancel: it is cancelled;
+-- options.aMoney, options.bMoney: the copper each side puts in.
+function World:Trade(a, b, aItems, bItems, options)
+    options = options or {}
+    a.trade = { partner = b, mine = aItems or {}, theirs = bItems or {}, myMoney = options.aMoney, theirMoney = options.bMoney }
+    b.trade = { partner = a, mine = bItems or {}, theirs = aItems or {}, myMoney = options.bMoney, theirMoney = options.aMoney }
+    for _, client in ipairs({ a, b }) do
+        self:FireEvent(client, "TRADE_SHOW")
+        if client.trade.myMoney or client.trade.theirMoney then
+            self:FireEvent(client, "TRADE_MONEY_CHANGED")
+        end
+        for slot in pairs(client.trade.mine) do
+            self:FireEvent(client, "TRADE_PLAYER_ITEM_CHANGED", slot)
+        end
+        for slot in pairs(client.trade.theirs) do
+            self:FireEvent(client, "TRADE_TARGET_ITEM_CHANGED", slot)
+        end
+        self:FireEvent(client, "TRADE_ACCEPT_UPDATE", 1, 0)
+    end
+    -- Like the game: the window empties and closes, then the trade is
+    -- told complete.
+    for _, client in ipairs({ a, b }) do
+        client.trade = nil
+        self:FireEvent(client, "TRADE_CLOSED")
+        self:FireEvent(client, "TRADE_CLOSED")
+        if options and options.cancel then
+            self:FireEvent(client, "UI_INFO_MESSAGE", 227, "Trade cancelled.")
+        else
+            self:FireEvent(client, "UI_INFO_MESSAGE", 226, "Trade complete.")
+        end
+    end
+end
+
+-- Mail from a client to a name as typed, with items ({ { itemID, count }...
+-- by slot }). options.fail: the game refuses to send it; options.money:
+-- the copper it carries.
+function World:Mail(from, toName, items, options)
+    from.sendMail = items
+    self:FireEvent(from, "MAIL_SEND_INFO_UPDATE")
+    from.env.SendMail(toName, "Subject", "")
+    if options and options.fail then
+        self:FireEvent(from, "MAIL_FAILED")
+    else
+        self:FireEvent(from, "MAIL_SEND_SUCCESS")
+        local to = assert(self:FindClient(toName), "no client " .. toName)
+        local copy = {}
+        for i, item in ipairs(items) do
+            copy[i] = { item[1], item[2] }
+        end
+        to.inbox[#to.inbox + 1] = { from = from.name, items = copy, money = options and options.money }
+    end
+    from.sendMail = nil
+end
+
+-- Takes the items of a mail of the inbox: one slot, the money ("money"),
+-- or all of it.
+function World:TakeMail(client, index, slot)
+    if slot == "money" then
+        client.env.TakeInboxMoney(index)
+    elseif slot then
+        client.env.TakeInboxItem(index, slot)
+    else
+        client.env.AutoLootMailItem(index)
+    end
+    self:RunFor(1)
 end
 
 -- The server -------------------------------------------------------------------------
@@ -879,7 +950,7 @@ function World:MakeEnv(client)
     end
     api.C_AddOns = {
         GetAddOnMetadata = function()
-            return "0.8.0"
+            return "0.9.0"
         end,
     }
     api.GetLocale = function()
@@ -1263,11 +1334,153 @@ function World:MakeEnv(client)
     api.ChatFrameUtil.InsertLink = function(link)
         client.linked = link
     end
+    api.ChatFrameUtil.SendTell = function(name)
+        client.whispered = name
+    end
+    -- The game opens its profession window on one of our recipes.
+    api.ProfessionsUtil = {
+        OpenProfessionFrameToRecipe = function(recipeID)
+            client.openedRecipe = recipeID
+            return true
+        end,
+    }
     if world.communities then
         api.CommunitiesFrame = world.communities(client)
         api.EventUtil.ContinueOnAddOnLoaded = function(_, callback)
             callback()
         end
+    end
+    -- Trade and mail, driven by World:Trade, World:Mail and World:TakeMail.
+    api.ERR_TRADE_COMPLETE = "Trade complete."
+    api.ERR_INV_FULL = "Inventory is full."
+    api.ATTACHMENTS_MAX_SEND, api.ATTACHMENTS_MAX_RECEIVE = 12, 16
+    local function ItemLink(item)
+        return item and ("|cffffffff|Hitem:%d::::::::|h[Item%d]|h|r"):format(item[1], item[1]) or nil
+    end
+    local unitName = api.UnitName
+    -- "NPC" is whoever we trade with.
+    api.UnitGUID = function(unit)
+        if unit == "NPC" then
+            return client.trade and client.trade.partner.guid
+        end
+        return client.guid
+    end
+    api.UnitName = function(unit)
+        if unit == "NPC" then
+            return client.trade and client.trade.partner.name
+        end
+        return unitName(unit)
+    end
+    local function TradeSlot(side, slot)
+        return client.trade and client.trade[side][slot] or nil
+    end
+    api.GetTradePlayerItemInfo = function(slot)
+        local item = TradeSlot("mine", slot)
+        if item then
+            return "Item" .. item[1], 3, item[2], 1, nil, false
+        end
+    end
+    api.GetTradePlayerItemLink = function(slot)
+        return ItemLink(TradeSlot("mine", slot))
+    end
+    api.GetTradeTargetItemInfo = function(slot)
+        local item = TradeSlot("theirs", slot)
+        if item then
+            return "Item" .. item[1], 3, item[2], 1, true, nil
+        end
+    end
+    api.GetTradeTargetItemLink = function(slot)
+        return ItemLink(TradeSlot("theirs", slot))
+    end
+    api.GetPlayerTradeMoney = function()
+        return client.trade and client.trade.myMoney or 0
+    end
+    api.GetTargetTradeMoney = function()
+        return client.trade and client.trade.theirMoney or 0
+    end
+    api.GetSendMailItem = function(slot)
+        local item = client.sendMail and client.sendMail[slot]
+        if item then
+            return "Item" .. item[1], item[1], 3, item[2], 1, true
+        end
+    end
+    api.GetSendMailItemLink = function(slot)
+        return ItemLink(client.sendMail and client.sendMail[slot])
+    end
+    -- The world delivers it (World:Mail).
+    api.SendMail = function() end
+    api.GetInboxNumItems = function()
+        return #client.inbox
+    end
+    api.GetInboxHeaderInfo = function(index)
+        local mail = client.inbox[index]
+        if mail then
+            return nil, nil, mail.from, "Subject", mail.money or 0, 0, 30, #mail.items, false, mail.returned == true, false, true, false
+        end
+    end
+    local function MailItem(index, slot)
+        local mail = client.inbox[index]
+        return mail and mail.items[slot] or nil
+    end
+    api.GetInboxItem = function(index, slot)
+        local item = MailItem(index, slot)
+        if item then
+            return "Item" .. item[1], item[1], 3, item[2], 1, true
+        end
+    end
+    api.GetInboxItemLink = function(index, slot)
+        return ItemLink(MailItem(index, slot))
+    end
+    -- The server answers a moment later: the items go to the bags (or the
+    -- bags are full), and a mail left empty is deleted.
+    -- what: "item" (one slot), "money" or "all".
+    local function Take(index, slot, what)
+        local mail = client.inbox[index]
+        if not mail then
+            return
+        end
+        world:Schedule(0.1, function()
+            if what ~= "money" then
+                if client.bagsFull then
+                    world:FireEvent(client, "UI_ERROR_MESSAGE", 2, api.ERR_INV_FULL)
+                    return
+                end
+                for i = slot or 1, slot or #mail.items do
+                    local item = mail.items[i]
+                    if item then
+                        client.bags = client.bags or {}
+                        client.bags[item[1]] = (client.bags[item[1]] or 0) + item[2]
+                        mail.items[i] = false
+                    end
+                end
+            end
+            if what ~= "item" then
+                client.money = (client.money or 0) + (mail.money or 0)
+                mail.money = 0
+            end
+            local left = (mail.money or 0) > 0
+            for _, item in ipairs(mail.items) do
+                left = left or item ~= false
+            end
+            if not left then
+                for i, other in ipairs(client.inbox) do
+                    if other == mail then
+                        table.remove(client.inbox, i)
+                        break
+                    end
+                end
+            end
+            world:FireEvent(client, "MAIL_INBOX_UPDATE")
+        end, client)
+    end
+    api.TakeInboxItem = function(index, slot)
+        Take(index, slot, "item")
+    end
+    api.TakeInboxMoney = function(index)
+        Take(index, nil, "money")
+    end
+    api.AutoLootMailItem = function(index)
+        Take(index, nil, "all")
     end
     api.ERR_CHAT_PLAYER_NOT_FOUND_S = "No player named '%s' is currently playing."
     api.YES, api.NO, api.NONE = "Yes", "No", "None"

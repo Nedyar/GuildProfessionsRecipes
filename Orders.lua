@@ -5,11 +5,16 @@
 -- Pack.lua for the fields):
 --   - the requester's record holds the order (o); only the requester
 --     creates, modifies, cancels or finishes it;
---   - a crafter's record holds their answer to it (a): accepted, denied or
---     completed. Releasing an accepted order removes the answer.
+--   - a crafter's record holds their answer to it (a): accepted, denied,
+--     materials received or completed, how many items they delivered and
+--     how much of the tip they received. Releasing an accepted order
+--     removes the answer.
+-- An order with a tip cannot be finished until its crafter has the tip.
 -- Every client works out an order's state from both, in the same way: when
 -- two crafters accept an open order at once, the earlier acceptance wins
 -- everywhere, and modifying an order voids the answers to its old version.
+-- Orders do not expire: they stay until cancelled or finished. Deliveries
+-- (Deliveries.lua) move them on by themselves, as the buttons do.
 local _, ns = ...
 local Data = ns.Data
 local LIMITS = ns.Pack.LIMITS
@@ -18,64 +23,91 @@ local Orders = {}
 ns.Orders = Orders
 
 local DAY = 86400
-local KEEP_CLOSED = 3 * DAY  -- finished, cancelled and expired orders stay listed this long
-Orders.DEFAULT_DAYS = 7
--- The first version that knows about orders: older members cannot see them.
-Orders.MIN_VERSION = 800
+local KEEP_CLOSED = 3 * DAY  -- finished and cancelled orders stay listed this long
+-- The first version whose orders this one understands: older members
+-- cannot see them, and theirs are left out.
+Orders.MIN_VERSION = 900
 
 -- The requester's side (order.s).
 local ACTIVE, CANCELLED, FINISHED = 0, 1, 2
--- A crafter's side (answer.s).
-local ACCEPTED, DENIED, COMPLETED = 1, 2, 3
+-- A crafter's side (answer.s). An accepted order whose requester provides
+-- the materials waits for them until its crafter has received them.
+local ACCEPTED, DENIED, COMPLETED, RECEIVED = 1, 2, 3, 4
+
+-- States with a crafter, and states that are over.
+local TAKEN = { materials = true, accepted = true, completed = true }
+local CLOSED = { finished = true, cancelled = true }
+
+function Orders.IsTaken(state)
+    return TAKEN[state] == true
+end
+
+function Orders.IsClosed(state)
+    return CLOSED[state] == true
+end
 
 function Orders.Key(requester, id)
     return requester .. ":" .. id
+end
+
+-- Whether a member runs a version that knows about orders as we do.
+function Orders.CanUse(record)
+    return record ~= nil and (record.av or 0) >= Orders.MIN_VERSION
+end
+
+-- Whose orders and answers count: members on a version like ours, and us
+-- (before our record is first stamped with this version).
+local function Counts(guid, record)
+    return Orders.CanUse(record) or guid == ns.playerGUID
 end
 
 -- Every answer given to each order: [key] = { { guid, answer }... }.
 local function AnswersByKey(guild)
     local byKey = {}
     for guid, record in pairs(guild and guild.members or {}) do
-        for key, answer in pairs(record.a or {}) do
-            local list = byKey[key]
-            if not list then
-                list = {}
-                byKey[key] = list
+        if Counts(guid, record) then
+            for key, answer in pairs(record.a or {}) do
+                local list = byKey[key]
+                if not list then
+                    list = {}
+                    byKey[key] = list
+                end
+                list[#list + 1] = { guid = guid, answer = answer }
             end
-            list[#list + 1] = { guid = guid, answer = answer }
         end
     end
     return byKey
 end
 
--- When an order stops being open: its creation plus the days it lasts.
-function Orders.Deadline(order)
-    return order.c + order.e * DAY
-end
-
 -- An order's state, worked out the same way on every client: "pending",
--- "denied", "accepted", "completed", "expired", "cancelled" or "finished".
--- Also returns its crafter's GUID, while accepted or completed.
-function Orders.State(order, requester, answers, now)
+-- "denied", "materials" (accepted, waiting for the requester's materials),
+-- "accepted", "completed", "cancelled" or "finished". While it is taken,
+-- also returns its crafter's GUID, how many items they delivered and how
+-- much of the tip they received.
+function Orders.State(order, requester, answers)
     if order.s == CANCELLED then
         return "cancelled"
     elseif order.s == FINISHED then
         return "finished"
-    elseif now >= Orders.Deadline(order) then
-        return "expired"
     end
     local crafter, chosen
     for _, entry in ipairs(answers or {}) do
         local answer = entry.answer
-        if (answer.s == ACCEPTED or answer.s == COMPLETED) and answer.ou == order.u and entry.guid ~= requester
-                and (order.d == nil or entry.guid == order.d) then
+        if (answer.s == ACCEPTED or answer.s == RECEIVED or answer.s == COMPLETED) and answer.ou == order.u
+                and entry.guid ~= requester and (order.d == nil or entry.guid == order.d) then
             if not chosen or answer.u < chosen.u or (answer.u == chosen.u and entry.guid < crafter) then
                 crafter, chosen = entry.guid, answer
             end
         end
     end
     if chosen then
-        return chosen.s == COMPLETED and "completed" or "accepted", crafter
+        local state = "accepted"
+        if chosen.s == COMPLETED then
+            state = "completed"
+        elseif chosen.s == ACCEPTED and order.m then
+            state = "materials"
+        end
+        return state, crafter, chosen.n or 0, chosen.p or 0
     end
     for _, entry in ipairs(answers or {}) do
         if entry.guid == order.d and entry.answer.s == DENIED and entry.answer.ou == order.u then
@@ -85,18 +117,18 @@ function Orders.State(order, requester, answers, now)
     return "pending"
 end
 
--- Every order of the guild, newest first, as views:
--- { key, requester, id, order, state, crafter }.
-function Orders.List(guild, now)
-    now = now or ns.Now()
+-- Every order of the guild's members, newest first, as views:
+-- { key, requester, id, order, state, crafter, delivered, tipPaid }.
+function Orders.List(guild)
     local answers = AnswersByKey(guild)
     local list = {}
     for guid, record in pairs(guild and guild.members or {}) do
-        if record.o and Data.IsShareable(record) then
+        if record.o and Data.IsShareable(record) and Counts(guid, record) and ns.Roster.IsKnownGUID(guid) then
             for id, order in pairs(record.o) do
                 local key = Orders.Key(guid, id)
-                local state, crafter = Orders.State(order, guid, answers[key], now)
-                list[#list + 1] = { key = key, requester = guid, id = id, order = order, state = state, crafter = crafter }
+                local state, crafter, delivered, tipPaid = Orders.State(order, guid, answers[key])
+                list[#list + 1] = { key = key, requester = guid, id = id, order = order, state = state,
+                    crafter = crafter, delivered = delivered, tipPaid = tipPaid }
             end
         end
     end
@@ -109,6 +141,14 @@ function Orders.List(guild, now)
     return list
 end
 
+-- How much of a taken order's tip its crafter has yet to receive (copper).
+function Orders.TipMissing(view)
+    if not TAKEN[view.state] then
+        return 0
+    end
+    return math.max(0, (view.order.tip or 0) - (view.tipPaid or 0))
+end
+
 -- One order's view, or nil.
 function Orders.Find(guild, requester, id)
     for _, view in ipairs(Orders.List(guild)) do
@@ -116,11 +156,6 @@ function Orders.Find(guild, requester, id)
             return view
         end
     end
-end
-
--- Whether a member runs a version that knows about orders.
-function Orders.CanUse(record)
-    return record ~= nil and (record.av or 0) >= Orders.MIN_VERSION
 end
 
 local function Knows(record, skillLine, recipeID)
@@ -182,12 +217,11 @@ end
 
 -- What the subtabs list ---------------------------------------------------------
 
--- Ours to act on: accepted or completed by us, or directed to us and waiting.
+-- Ours to act on: taken by us, or directed to us and waiting.
 function Orders.ForMe(guild)
     local list = {}
     for _, view in ipairs(Orders.List(guild)) do
-        if view.crafter == ns.playerGUID and (view.state == "accepted" or view.state == "completed")
-                or view.order.d == ns.playerGUID and view.state == "pending" then
+        if view.crafter == ns.playerGUID or view.order.d == ns.playerGUID and view.state == "pending" then
             list[#list + 1] = view
         end
     end
@@ -221,9 +255,9 @@ end
 -- Our own changes ------------------------------------------------------------------
 
 -- The fields of an order as the form gives them, checked and limited:
--- { sl, r, q, d, m, tip, note, e }. Returns nil and a reason when unusable.
+-- { sl, r, q, d, m, tip, note }. Returns nil and a reason when unusable.
 local function Checked(fields)
-    local q, e, tip = tonumber(fields.q) or 1, tonumber(fields.e) or Orders.DEFAULT_DAYS, tonumber(fields.tip) or 0
+    local q, tip = tonumber(fields.q) or 1, tonumber(fields.tip) or 0
     if type(fields.sl) ~= "number" or type(fields.r) ~= "number" then
         return nil, "recipe"
     end
@@ -237,7 +271,6 @@ local function Checked(fields)
     return {
         sl = fields.sl, r = fields.r, d = fields.d, m = fields.m == true, note = note,
         q = math.max(1, math.min(LIMITS.quantity, math.floor(q))),
-        e = math.max(1, math.min(LIMITS.days, math.floor(e))),
         tip = math.max(0, math.min(LIMITS.tip, math.floor(tip))),
     }
 end
@@ -306,11 +339,12 @@ function Orders.Modify(id, fields)
     return true
 end
 
--- Cancels one of our orders that nobody has taken (or that expired).
+-- Cancels one of our orders that is not over, even once taken: its
+-- crafter is told (OrderList.lua).
 function Orders.Cancel(id)
     local view = Orders.Find(Data.CurrentGuild(false), ns.playerGUID, id)
-    if not view or not (view.state == "pending" or view.state == "denied" or view.state == "expired") then
-        return nil, "taken"
+    if not view or CLOSED[view.state] then
+        return nil, "state"
     end
     view.order.s = CANCELLED
     Bump(view.order)
@@ -318,11 +352,15 @@ function Orders.Cancel(id)
     return true
 end
 
--- Marks one of our orders finished, once its crafter completed it.
+-- Marks one of our taken orders finished: once its crafter completed it,
+-- or before, when we already have what we asked for. Not while its
+-- crafter has yet to receive the tip.
 function Orders.Finish(id)
     local view = Orders.Find(Data.CurrentGuild(false), ns.playerGUID, id)
-    if not view or view.state ~= "completed" then
+    if not view or not TAKEN[view.state] then
         return nil, "state"
+    elseif Orders.TipMissing(view) > 0 then
+        return nil, "tip"
     end
     view.order.s = FINISHED
     Bump(view.order)
@@ -330,12 +368,12 @@ function Orders.Finish(id)
     return true
 end
 
--- Deletes one of our closed orders (finished, cancelled or expired) now,
--- rather than three days later. Gone from our record, it is gone for
--- everyone, and crafters drop their answers to it.
+-- Deletes one of our closed orders (finished or cancelled) now, rather
+-- than three days later. Gone from our record, it is gone for everyone,
+-- and crafters drop their answers to it.
 function Orders.Remove(id)
     local view = Orders.Find(Data.CurrentGuild(false), ns.playerGUID, id)
-    if not view or not (view.state == "finished" or view.state == "cancelled" or view.state == "expired") then
+    if not view or not CLOSED[view.state] then
         return nil, "state"
     end
     local record = Data.GetOwnRecord(false)
@@ -355,6 +393,17 @@ local function Answer(view, state)
     Commit(record)
     return true
 end
+
+-- An order we took, and our answer to it, while it is in one of states.
+local function OwnTaken(requester, id, states)
+    local view = Orders.Find(Data.CurrentGuild(false), requester, id)
+    if view and view.crafter == ns.playerGUID and states[view.state] then
+        local record = Data.GetOwnRecord(false)
+        return view, record, record.a[view.key]
+    end
+end
+
+local WORKING = { materials = true, accepted = true }
 
 -- Accepts an order: an open one whose recipe we know, or one directed to us.
 function Orders.Accept(requester, id)
@@ -377,22 +426,74 @@ function Orders.Deny(requester, id)
     return Answer(view, DENIED)
 end
 
--- Marks an order we accepted as completed; its requester then finishes it.
-function Orders.Complete(requester, id)
-    local view = Orders.Find(Data.CurrentGuild(false), requester, id)
-    if not view or view.state ~= "accepted" or view.crafter ~= ns.playerGUID then
+-- Marks the materials of an order we accepted as received.
+function Orders.Receive(requester, id)
+    local _, record, answer = OwnTaken(requester, id, { materials = true })
+    if not answer then
         return nil, "state"
     end
-    local record = Data.GetOwnRecord(false)
-    record.a[view.key].s = COMPLETED
+    answer.s = RECEIVED
+    Commit(record)
+    return true
+end
+
+-- Marks an order we accepted as completed; its requester then finishes it.
+function Orders.Complete(requester, id)
+    local _, record, answer = OwnTaken(requester, id, WORKING)
+    if not answer then
+        return nil, "state"
+    end
+    answer.s = COMPLETED
+    Commit(record)
+    return true
+end
+
+-- Counts items of an order we accepted as delivered to its requester; with
+-- all of them, it is completed. Returns how many are delivered now, and
+-- whether that completed it.
+function Orders.Deliver(requester, id, count)
+    local view, record, answer = OwnTaken(requester, id, WORKING)
+    if not answer or not count or count < 1 then
+        return nil, "state"
+    end
+    answer.n = math.min(view.order.q, (answer.n or 0) + math.floor(count))
+    local completed = answer.n >= view.order.q
+    if completed then
+        answer.s = COMPLETED
+    end
+    Commit(record)
+    return answer.n, completed
+end
+
+-- Counts copper received from the requester of an order we took towards
+-- its tip, up to the tip. Returns how much of it we have now, and whether
+-- that is all of it.
+function Orders.TipReceived(requester, id, copper)
+    local view, record, answer = OwnTaken(requester, id, TAKEN)
+    if not answer or not copper or copper < 1 or Orders.TipMissing(view) == 0 then
+        return nil, "state"
+    end
+    answer.p = math.min(view.order.tip, (answer.p or 0) + math.floor(copper))
+    Commit(record)
+    return answer.p, answer.p >= view.order.tip
+end
+
+-- Marks the tip of an order we took as received: paid in a way the addon
+-- could not see, or forgiven.
+function Orders.ConfirmTip(requester, id)
+    local view, record, answer = OwnTaken(requester, id, TAKEN)
+    if not answer or Orders.TipMissing(view) == 0 then
+        return nil, "state"
+    end
+    answer.p = view.order.tip
     Commit(record)
     return true
 end
 
 -- Gives back an order we accepted: it is pending again.
 function Orders.Release(requester, id)
-    local view = Orders.Find(Data.CurrentGuild(false), requester, id)
-    if not view or view.state ~= "accepted" or view.crafter ~= ns.playerGUID then
+    local view = OwnTaken(requester, id, WORKING)
+    if not view then
         return nil, "state"
     end
     return Answer(view, nil)
@@ -400,8 +501,30 @@ end
 
 -- Clean-up ------------------------------------------------------------------------
 
--- Drops our orders closed for a while, and our answers to orders that are
--- gone or closed for a while. Returns true when anything was dropped.
+-- Our record as 0.8 left it: each order lasted some days (e), and expired
+-- after them. With no expiry those would open again, so they are cancelled
+-- as of then. Returns true when the record has to be stamped again, which
+-- also tells the guild we run a version with orders like theirs.
+local function Upgrade(record)
+    local changed = (record.av or 0) < Orders.MIN_VERSION and ns.VERSION_NUM >= Orders.MIN_VERSION
+        and Data.IsShareable(record)
+    for _, order in pairs(record.o or {}) do
+        if order.e then
+            local deadline = order.c + order.e * DAY
+            if order.s == ACTIVE and deadline <= ns.Now() then
+                order.s = CANCELLED
+                order.u = math.max(order.u, deadline)
+            end
+            order.e = nil
+            changed = true
+        end
+    end
+    return changed
+end
+
+-- Upgrades our record, drops our orders closed for a while, and our
+-- answers to orders that are gone, closed for a while, or whose requester
+-- left the guild. Returns true when anything changed.
 function Orders.Prune(now)
     now = now or ns.Now()
     local guild = Data.CurrentGuild(false)
@@ -409,28 +532,25 @@ function Orders.Prune(now)
     if not guild or not record then
         return false
     end
-    local changed = false
+    local changed = Upgrade(record)
     for id, order in pairs(record.o or {}) do
-        local closedSince = order.s ~= ACTIVE and order.u or Orders.Deadline(order)
-        if closedSince + KEEP_CLOSED < now then
+        if order.s ~= ACTIVE and order.u + KEEP_CLOSED < now then
             record.o[id] = nil
             changed = true
         end
     end
     local views = {}
-    for _, view in ipairs(Orders.List(guild, now)) do
+    for _, view in ipairs(Orders.List(guild)) do
         views[view.key] = view
     end
-    for key, answer in pairs(record.a or {}) do
+    for key in pairs(record.a or {}) do
         local requester, id = key:match("^(.+):(%d+)$")
         local owner = guild.members[requester]
         local view = views[key]
         local gone = owner and owner.o ~= nil and owner.o[tonumber(id)] == nil
-        local closedSince = view and (view.state == "expired" and Orders.Deadline(view.order)
-            or (view.state == "finished" or view.state == "cancelled") and view.order.u)
-        local closed = closedSince and closedSince + KEEP_CLOSED < now
-        local stale = answer.u + (LIMITS.days * DAY) + KEEP_CLOSED < now
-        if gone or closed or stale then
+        local closed = view and CLOSED[view.state] and view.order.u + KEEP_CLOSED < now
+        local left = not ns.Roster.IsKnownGUID(requester)
+        if gone or closed or left then
             record.a[key] = nil
             changed = true
         end
@@ -444,7 +564,7 @@ end
 local PRUNE_INTERVAL = 3600
 
 function Orders.Init()
-    -- After changes, and now and then: orders also close by just expiring.
+    -- After changes, and now and then: closed orders go after a few days.
     ns.On("DataChanged", function()
         ns.Debounce("OrdersPrune", 5, function()
             Orders.Prune()

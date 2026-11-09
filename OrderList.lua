@@ -24,53 +24,73 @@ local function Money(copper)
     end
     return ("%dg %ds %dc"):format(math.floor(copper / 10000), math.floor(copper / 100) % 100, copper % 100)
 end
+OrderList.Money = Money
 
 local function Name(guid)
     return ns.Data.NameOf(guid, ns.Data.CurrentGuild(false) and ns.Data.CurrentGuild(false).members[guid])
 end
 
-local function TimeLeft(order)
-    local seconds = math.max(ns.Orders.Deadline(order) - ns.Now(), 60)
-    return L["%s left"]:format(SecondsToTime(seconds, true, false, 1))
+-- Where a taken order stands, before any count of its items delivered.
+local function TakenText(view, mode)
+    local byUs = view.crafter == ns.playerGUID
+    if view.state == "materials" then
+        if mode == "mine" then
+            return L["Accepted by %s: waiting for your materials"]:format(Name(view.crafter))
+        end
+        return byUs and L["Accepted by you: waiting for the materials"] or L["Accepted by %s"]:format(Name(view.crafter))
+    elseif view.state == "accepted" then
+        return byUs and L["Accepted by you"] or L["Accepted by %s"]:format(Name(view.crafter))
+    elseif mode == "mine" then
+        return L["Completed by %s"]:format(Name(view.crafter))
+    end
+    return L["Completed: waiting for %s to finish it"]:format(Name(view.requester))
 end
 
 -- Where an order stands, as seen from the list it is in.
 local function StateText(view, mode)
     local order, state = view.order, view.state
     if state == "pending" then
-        local who
         if order.d == ns.playerGUID then
-            who = L["Personal order for you"]
+            return L["Personal order for you"]
         elseif order.d then
-            who = L["Personal order for %s"]:format(Name(order.d))
-        else
-            who = L["Open order"]
+            return L["Personal order for %s"]:format(Name(order.d))
         end
-        return ("%s · %s"):format(who, TimeLeft(order))
+        return L["Open order"]
     elseif state == "denied" then
         return L["Denied by %s"]:format(Name(order.d))
-    elseif state == "accepted" then
-        return view.crafter == ns.playerGUID and L["Accepted by you"] or L["Accepted by %s"]:format(Name(view.crafter))
-    elseif state == "completed" then
-        if mode == "mine" then
-            return L["Completed by %s"]:format(Name(view.crafter))
+    elseif ns.Orders.IsTaken(state) then
+        local text = TakenText(view, mode)
+        if state ~= "completed" and (view.delivered or 0) > 0 then
+            text = ("%s · %s"):format(text, L["%d/%d delivered"]:format(view.delivered, order.q))
         end
-        return L["Completed: waiting for %s to finish it"]:format(Name(view.requester))
-    elseif state == "expired" then
-        return L["Expired"]
+        return text
     elseif state == "cancelled" then
         return L["Cancelled"]
     end
     return L["Finished"]
 end
 
-local function PaymentText(order)
+-- The tip, and once the order is taken, whether its crafter has it.
+local function TipText(view)
+    local tip = view.order.tip or 0
+    if not ns.Orders.IsTaken(view.state) then
+        return L["Tip: %s"]:format(Money(tip))
+    end
+    local missing = ns.Orders.TipMissing(view)
+    if missing == 0 then
+        return L["Tip: %s (paid)"]:format(Money(tip))
+    end
+    return L["Tip: %s (%s missing)"]:format(Money(tip), Money(missing))
+end
+
+local function PaymentText(view)
+    local order = view.order
     local parts = {}
     if order.m then
         parts[#parts + 1] = L["Materials provided"]
     end
     if (order.tip or 0) > 0 then
-        parts[#parts + 1] = L["Tip: %s"]:format(Money(order.tip))
+        parts[#parts + 1] = TipText(view)
     end
     if order.note ~= "" then
         local note = order.note:gsub("\n", " ")
@@ -93,6 +113,8 @@ local function Run(action, view)
         ok = ns.Orders.Accept(view.requester, view.id)
     elseif action == "deny" then
         ok = ns.Orders.Deny(view.requester, view.id)
+    elseif action == "received" then
+        ok = ns.Orders.Receive(view.requester, view.id)
     elseif action == "complete" then
         ok = ns.Orders.Complete(view.requester, view.id)
     elseif action == "release" then
@@ -101,6 +123,8 @@ local function Run(action, view)
         ok = ns.Orders.Cancel(view.id)
     elseif action == "finish" then
         ok = ns.Orders.Finish(view.id)
+    elseif action == "tip" then
+        ok = ns.Orders.ConfirmTip(view.requester, view.id)
     elseif action == "delete" then
         ok = ns.Orders.Remove(view.id)
     end
@@ -118,8 +142,12 @@ local function Actions(view, mode)
     if mode == "pending" then
         if state == "pending" then
             return { { "accept", ACCEPT or "Accept", true }, { "deny", DECLINE or "Decline", true } }
+        elseif state == "materials" then
+            return { { "received", L["Received"], true, L["Mark the materials as received."] }, { "release", L["Release"], true } }
         elseif state == "accepted" then
             return { { "complete", L["Complete"], true }, { "release", L["Release"], true } }
+        elseif state == "completed" and ns.Orders.TipMissing(view) > 0 then
+            return { { "tip", L["Tip paid"], true, L["Mark the tip as paid, or forgive it."] } }
         end
     elseif mode == "open" then
         if view.requester == ns.playerGUID then
@@ -130,9 +158,11 @@ local function Actions(view, mode)
     elseif mode == "mine" then
         if state == "pending" or state == "denied" then
             return { { "modify", L["Modify"], true }, { "cancel", CANCEL or "Cancel", true } }
-        elseif state == "completed" then
-            return { { "finish", L["Finish"], true } }
-        elseif state == "finished" or state == "cancelled" or state == "expired" then
+        elseif ns.Orders.IsTaken(state) then
+            local paid = ns.Orders.TipMissing(view) == 0
+            return { { "finish", L["Finish"], paid, not paid and L["Waiting for %s to confirm the tip."]:format(Name(view.crafter)) or nil },
+                { "cancel", CANCEL or "Cancel", true } }
+        elseif ns.Orders.IsClosed(state) then
             return { { "delete", DELETE or "Delete", true } }
         end
     end
@@ -140,6 +170,12 @@ local function Actions(view, mode)
 end
 
 -- Rows -------------------------------------------------------------------------------
+
+-- Whether a click on an order opens the game's profession window: in our
+-- pending orders (taken by us, or directed to us), when we know the recipe.
+local function InGame(view, mode)
+    return mode == "pending" and ns.Orders.CanCraft(view.order)
+end
 
 local function RowOnEnter(row)
     local view = row.view
@@ -154,17 +190,22 @@ local function RowOnEnter(row)
         GameTooltip:AddLine(L["Materials provided"], 1, 1, 1)
     end
     if (view.order.tip or 0) > 0 then
-        GameTooltip:AddLine(L["Tip: %s"]:format(Money(view.order.tip)), 1, 1, 1)
+        GameTooltip:AddLine(TipText(view), 1, 1, 1)
     end
     if view.order.note ~= "" then
         GameTooltip:AddLine(view.order.note, 0.9, 0.9, 0.9, true)
     end
-    GameTooltip:AddLine(L["Click to see the recipe."], GREEN_FONT_COLOR:GetRGB())
+    local hint = InGame(view, row.mode) and L["Click to open it in your profession window."] or L["Click to see the recipe."]
+    GameTooltip:AddLine(hint, GREEN_FONT_COLOR:GetRGB())
     GameTooltip:Show()
 end
 
--- The recipe window on the order's recipe, among the guild's.
-local function ShowRecipe(view)
+-- The recipe window on the order's recipe, among the guild's; for one of
+-- our pending orders, the game's own profession window, to craft it.
+local function ShowRecipe(view, mode)
+    if InGame(view, mode) and ns.Viewer.OpenRecipeInGame(view.order.sl, view.order.r) then
+        return
+    end
     ns.Viewer.OpenGuild(view.order.sl, view.order.r)
 end
 
@@ -181,7 +222,7 @@ local function CreateRow(row)
     row.Icon:SetSize(36, 36)
     row.Icon:SetPoint("LEFT", 8, 0)
     -- Over the icon, what the order makes, as in the recipe window; a click
-    -- shows the recipe, as on the row, and shift-click links it.
+    -- does what a click on the row does, and shift-click links it.
     row.Item = CreateFrame("Button", nil, row)
     row.Item:SetAllPoints(row.Icon)
     row.Item:SetScript("OnEnter", function(self)
@@ -196,7 +237,7 @@ local function CreateRow(row)
         elseif IsModifiedClick("CHATLINK") then
             ns.Viewer.LinkRecipe(row.view.order.r)
         else
-            ShowRecipe(row.view)
+            ShowRecipe(row.view, row.mode)
         end
     end)
     row.Title =row:CreateFontString(nil, "ARTWORK", "GameFontNormal")
@@ -239,10 +280,11 @@ local function CreateRow(row)
     row:EnableMouse(true)
     row:SetScript("OnEnter", RowOnEnter)
     row:SetScript("OnLeave", GameTooltip_Hide)
-    -- A click on the row (its buttons take their own) shows the recipe.
+    -- A click on the row (its buttons take their own) shows the recipe
+    -- (ShowRecipe).
     row:SetScript("OnMouseUp", function(self, mouseButton)
         if mouseButton == "LeftButton" and self.view and self:IsMouseOver() then
-            ShowRecipe(self.view)
+            ShowRecipe(self.view, self.mode)
         end
     end)
 end
@@ -255,15 +297,14 @@ local function InitRow(row, data)
     row.view, row.mode = view, data.mode
     local name, icon = ns.Viewer.RecipeOutput(view.order.r)
     row.Icon:SetTexture(icon)
-    local closed = view.state == "finished" or view.state == "cancelled" or view.state == "expired"
-    row.Icon:SetDesaturated(closed)
+    row.Icon:SetDesaturated(ns.Orders.IsClosed(view.state))
     row.Title:SetText(view.order.q > 1 and ("%s x%d"):format(name, view.order.q) or name)
     local state = StateText(view, data.mode)
     if data.mode ~= "mine" then
         state = ("%s · %s"):format(L["From %s"]:format(Name(view.requester)), state)
     end
     row.State:SetText(state)
-    row.Payment:SetText(PaymentText(view.order))
+    row.Payment:SetText(PaymentText(view))
     local actions = Actions(view, data.mode)
     for i, button in ipairs(row.buttons) do
         -- The first action sits rightmost.
@@ -334,12 +375,12 @@ function OrderList.WaitingForMe()
     return count
 end
 
--- How many of our own orders wait for us: completed (to finish) or denied
--- (to change or cancel).
+-- How many of our own orders wait for us: denied (to change or cancel),
+-- waiting for our materials, or completed (to finish).
 function OrderList.WaitingOnMine()
     local count = 0
     for _, view in ipairs(OrderList.Views("mine")) do
-        if view.state == "completed" or view.state == "denied" then
+        if view.state == "denied" or view.state == "materials" or view.state == "completed" then
             count = count + 1
         end
     end
@@ -348,48 +389,67 @@ end
 
 -- Notices ---------------------------------------------------------------------------
 
--- What a change of state means for us, as a chat line only we see.
-local function Announce(view, before)
+-- What a change of state means for us, as a chat line only we see. Our
+-- own changes (and those Deliveries.lua makes for us) are not told here.
+-- wasOurs: we were its crafter last time.
+local function Announce(view, before, wasOurs)
     local name = ns.Viewer.RecipeOutput(view.order.r)
     local item = view.order.q > 1 and ("%s x%d"):format(name, view.order.q) or name
     local state = view.state
     if view.requester == ns.playerGUID then
-        if state == "accepted" and before ~= "completed" then
+        if state == "materials" then
+            ns.Print(L["%s accepted your order: %s. Send them the materials."], Name(view.crafter), item)
+        elseif state == "accepted" and before == "materials" then
+            ns.Print(L["%s received your materials: %s."], Name(view.crafter), item)
+        elseif state == "accepted" and before ~= "completed" then
             ns.Print(L["%s accepted your order: %s."], Name(view.crafter), item)
         elseif state == "completed" then
             ns.Print(L["%s completed your order: %s. Mark it finished once you have it."], Name(view.crafter), item)
         elseif state == "denied" then
             ns.Print(L["%s declined your order: %s."], Name(view.order.d), item)
-        elseif state == "expired" then
-            ns.Print(L["your order expired: %s."], item)
-        elseif state == "pending" and before == "accepted" then
+        elseif state == "pending" and ns.Orders.IsTaken(before) then
             ns.Print(L["your order is open again: %s."], item)
         end
-    elseif state == "pending" then
+    elseif state == "pending" and view.order.d == ns.playerGUID and not wasOurs then
         ns.Print(L["%s asks you for a personal order: %s."], Name(view.requester), item)
+    elseif state == "cancelled" and wasOurs then
+        ns.Print(L["%s cancelled the order you accepted: %s."], Name(view.requester), item)
     end
 end
 
--- Compares the orders that concern us (ours, and personal ones for us)
--- with how they stood last time, saved per character so changes made while
--- we were away are told at login too. The very first time, nothing is told.
+-- Compares the orders that concern us (ours, personal ones for us, and
+-- those we took) with how they stood last time, saved per character so
+-- changes made while we were away are told at login too. The very first
+-- time, nothing is told.
 function OrderList.CheckNotices()
     local guild = ns.Data.CurrentGuild(false)
     if not guild or not ns.playerGUID then
         return
     end
     local own = ns.Data.OwnState()
-    local before = own.orderStates
-    local now = {}
+    local before, takenBefore, owedBefore = own.orderStates, own.ordersTaken or {}, own.tipsOwed or {}
+    local now, taken, owed = {}, {}, {}
     for _, view in ipairs(ns.Orders.List(guild)) do
-        if view.requester == ns.playerGUID or view.order.d == ns.playerGUID then
+        local ours = view.crafter == ns.playerGUID
+        taken[view.key] = ours or nil
+        -- A cancelled order has no crafter any more: one we had taken is
+        -- followed through what we noted last time.
+        if view.requester == ns.playerGUID or view.order.d == ns.playerGUID or ours or takenBefore[view.key] then
             now[view.key] = view.state
             if before and before[view.key] ~= view.state then
-                Announce(view, before[view.key])
+                Announce(view, before[view.key], takenBefore[view.key])
+            end
+        end
+        -- The tips of our orders, until their crafters confirm them.
+        if view.requester == ns.playerGUID and ns.Orders.IsTaken(view.state) then
+            owed[view.key] = ns.Orders.TipMissing(view) > 0 or nil
+            if owedBefore[view.key] and not owed[view.key] then
+                local name = ns.Viewer.RecipeOutput(view.order.r)
+                ns.Print(L["%s confirmed your tip: %s."], Name(view.crafter), view.order.q > 1 and ("%s x%d"):format(name, view.order.q) or name)
             end
         end
     end
-    own.orderStates = now
+    own.orderStates, own.ordersTaken, own.tipsOwed = now, taken, owed
 end
 
 function OrderList.Init()

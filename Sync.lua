@@ -548,11 +548,12 @@ handlers[T_END] = function(reader, sender)
     end
 end
 
--- What a 0.2 to 0.7 client (protocol 2) may tell us: its own changes. Its
--- hellos and sync sessions are left alone, since it cannot read our replies.
+-- What an older client (protocol 2 for 0.2 to 0.7, 3 for 0.8) may tell
+-- us: its own changes. Its hellos and sync sessions are left alone, since
+-- it cannot read our replies.
 local LEGACY_TYPES = { [T_UPDATE] = true, [T_LEVELS] = true }
 
--- protocol: the one the message came in (Comm), 3 unless given.
+-- protocol: the one the message came in (Comm), the current one unless given.
 local function OnMessage(raw, sender, _, protocol)
     local guildKey = Roster.guildKey
     if not guildKey or not Roster.IsKnownSender(sender) then

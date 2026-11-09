@@ -177,7 +177,6 @@ local function Submit()
         m = frame.Materials:GetChecked() == true,
         tip = tip,
         q = Number(frame.Quantity) or 1,
-        e = Number(frame.Days) or ns.Orders.DEFAULT_DAYS,
         note = Truncate(frame.Note.EditBox:GetText() or "", ns.Pack.LIMITS.note),
     }
     local ok, reason
@@ -306,15 +305,11 @@ local function CreateForm()
         end)
     end
 
-    -- Quantity and days.
+    -- Quantity.
     local quantityTitle = Label(frame, L["Quantity"])
     quantityTitle:SetPoint("TOPLEFT", LEFT, -260)
     frame.Quantity = NumberBox(frame, 40, 3)
     frame.Quantity:SetPoint("LEFT", quantityTitle, "RIGHT", 12, 0)
-    local daysTitle = Label(frame, L["Expires in (days)"])
-    daysTitle:SetPoint("LEFT", frame.Quantity, "RIGHT", 24, 0)
-    frame.Days = NumberBox(frame, 30, 2)
-    frame.Days:SetPoint("LEFT", daysTitle, "RIGHT", 12, 0)
 
     -- Note.
     local noteTitle = Label(frame, L["Note (optional)"])
@@ -389,8 +384,8 @@ function OrderForm.Open(skillLine, recipeID, id, target)
     frame.Item.Icon:SetTexture(icon)
     frame.Recipe:SetText(name)
 
-    -- Personal orders need a member who knows the recipe and runs 0.8.
-    -- Disabled, its tooltip says which is missing.
+    -- Personal orders need a member who knows the recipe and runs a version
+    -- with orders like ours. Disabled, its tooltip says which is missing.
     frame.Personal:SetEnabled(#crafters > 0)
     local labelColor = #crafters > 0 and HIGHLIGHT_FONT_COLOR or GRAY_FONT_COLOR
     if labelColor then
@@ -399,7 +394,9 @@ function OrderForm.Open(skillLine, recipeID, id, target)
     if #crafters > 0 then
         frame.Personal.tooltipText = L["Only the member you choose can accept this order."]
     elseif ns.Orders.KnownByOthers(ns.Data.CurrentGuild(false), skillLine, recipeID) then
-        frame.Personal.tooltipText = L["Nobody else in the guild who knows this recipe can receive orders yet: they need version 0.8 or later."]
+        -- "0.9", as the version is spoken of.
+        local version = ns.VersionString(ns.Orders.MIN_VERSION):gsub("%.0$", "")
+        frame.Personal.tooltipText = L["Nobody else in the guild who knows this recipe can receive orders yet: they need version %s or later."]:format(version)
     else
         frame.Personal.tooltipText = L["Nobody else in the guild knows this recipe."]
     end
@@ -410,7 +407,6 @@ function OrderForm.Open(skillLine, recipeID, id, target)
     frame.Tip:SetChecked(order ~= nil and (order.tip or 0) > 0)
     SetMoney(order and order.tip)
     frame.Quantity:SetText(tostring(order and order.q or 1))
-    frame.Days:SetText(tostring(order and order.e or ns.Orders.DEFAULT_DAYS))
     frame.Note.EditBox:SetText(order and order.note or "")
     frame.Submit:SetText(order and L["Save"] or L["Request"])
     ShowError(nil)

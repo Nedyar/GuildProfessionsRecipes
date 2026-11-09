@@ -4,7 +4,17 @@ local ADDON_NAME, ns = ...
 local L = ns.L
 
 ns.VERSION = C_AddOns.GetAddOnMetadata(ADDON_NAME, "Version") or "0.0.0"
-ns.PREFIX = "GuildProfRecipes"
+
+-- Addon messages go out on PREFIX and are heard on every prefix in LISTEN.
+-- While a version with a new protocol is tried in game before its release
+-- (TRIAL), it talks on a prefix of its own: members on the released
+-- version do not hear it, so they are not asked to update to a version
+-- they cannot get yet, and their own messages are still heard. TRIAL is
+-- turned off for the release.
+ns.TRIAL = false
+local RELEASE_PREFIX = "GuildProfRecipes"
+ns.PREFIX = ns.TRIAL and "GuildProfRecTest" or RELEASE_PREFIX
+ns.LISTEN = { [ns.PREFIX] = true, [RELEASE_PREFIX] = true }
 
 -- "1.2.3" -> 10203. Records carry it so a newer client in the guild is noticed.
 function ns.VersionNumber(version)
@@ -250,7 +260,7 @@ events:SetScript("OnEvent", function(self, event, name)
         ns.loginTime = GetTime()
         -- Each part starts on its own, so a failure in one (reported as a normal
         -- Lua error) does not stop the others.
-        for _, init in ipairs({ ns.Comm.Init, ns.Roster.Init, ns.Scanner.Init, ns.Sync.Init, ns.Orders.Init, ns.OrderList.Init, ns.RosterColumn.Init, ns.GuildTab.Init, ns.Viewer.Init }) do
+        for _, init in ipairs({ ns.Comm.Init, ns.Roster.Init, ns.Scanner.Init, ns.Sync.Init, ns.Orders.Init, ns.OrderList.Init, ns.Deliveries.Init, ns.RosterColumn.Init, ns.GuildTab.Init, ns.Viewer.Init }) do
             xpcall(init, geterrorhandler())
         end
     end

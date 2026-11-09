@@ -138,8 +138,8 @@ function Data.CleanNote(note)
     return note
 end
 
--- Checked copies of a record's crafting orders and answers (format 3), or
--- nil when they cannot be trusted. See Pack.lua and Orders.lua.
+-- Checked copies of a record's crafting orders and answers (format 3 and
+-- later), or nil when they cannot be trusted. See Pack.lua and Orders.lua.
 local function CleanOrders(orders, now)
     if type(orders) ~= "table" then
         return nil
@@ -153,9 +153,10 @@ local function CleanOrders(orders, now)
         if not (IsID(order.sl) and IsID(order.r) and IsCount(order.q, LIMITS.quantity) and order.q > 0
                 and (order.d == nil or Data.IsGUID(order.d)) and IsCount(order.tip or 0, LIMITS.tip) and note
                 and IsTime(order.c, now) and IsTime(order.u, now) and order.u >= order.c
-                and IsCount(order.e, LIMITS.days) and order.e > 0 and IsCount(order.s or 0, 2)) then
+                and (order.e == nil or IsCount(order.e, LIMITS.days) and order.e > 0) and IsCount(order.s or 0, 2)) then
             return nil
         end
+        -- e: the days an order of 0.8 lasted, kept until Orders upgrades it.
         clean[id] = { sl = order.sl, r = order.r, q = order.q, d = order.d, m = order.m == true, tip = order.tip or 0,
             note = note, c = order.c, u = order.u, e = order.e, s = order.s or 0 }
         count = count + 1
@@ -176,11 +177,13 @@ local function CleanAnswers(answers, now)
         if type(key) == "string" then
             requester, id = key:match("^(.+):(%d+)$")
         end
-        if not (requester and Data.IsGUID(requester) and type(answer) == "table" and IsCount(answer.s, 3) and answer.s > 0
-                and IsTime(answer.u, now) and IsTime(answer.ou, now)) then
+        if not (requester and Data.IsGUID(requester) and type(answer) == "table" and IsCount(answer.s, 4) and answer.s > 0
+                and IsTime(answer.u, now) and IsTime(answer.ou, now) and IsCount(answer.n or 0, LIMITS.quantity)
+                and IsCount(answer.p or 0, LIMITS.tip)) then
             return nil
         end
-        clean[requester .. ":" .. tonumber(id)] = { s = answer.s, u = answer.u, ou = answer.ou }
+        clean[requester .. ":" .. tonumber(id)] = { s = answer.s, u = answer.u, ou = answer.ou,
+            n = answer.n ~= 0 and answer.n or nil, p = answer.p ~= 0 and answer.p or nil }
         count = count + 1
         if count > LIMITS.answers then
             return nil

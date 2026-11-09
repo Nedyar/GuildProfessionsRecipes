@@ -12,7 +12,7 @@
 ## Notes-zhCN: 在公会名单中显示公会成员的专业和配方。
 ## Notes-zhTW: 在公會名冊中顯示公會成員的專業技能與配方。
 ## Author: Nedyar
-## Version: 0.8.2
+## Version: 0.9.0
 ## SavedVariables: GuildProfessionsRecipesDB
 ## IconTexture: Interface\Icons\INV_Scroll_03
 
@@ -41,4 +41,5 @@ GuildTab.lua
 Viewer.lua
 OrderForm.lua
 OrderList.lua
+Deliveries.lua
 Probe.lua

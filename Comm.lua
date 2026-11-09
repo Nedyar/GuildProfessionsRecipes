@@ -22,8 +22,10 @@ local Pack = ns.Pack
 local Comm = {}
 ns.Comm = Comm
 
-local PROTOCOL = "3"         -- 3: records carry crafting orders (version 0.8)
-local LEGACY = "2"           -- 2: members known by GUID (0.2 to 0.7), still read
+local PROTOCOL = "4"         -- 4: orders without expiry, deliveries counted (version 0.9)
+-- Still read: 2, members known by GUID (0.2 to 0.7); 3, records with
+-- crafting orders (0.8).
+local LEGACY = { ["2"] = true, ["3"] = true }
 local PROBE = "0"            -- test messages of /grecipes probe
 local HEADER = 6
 local CHUNK = 255 - HEADER
@@ -348,7 +350,7 @@ local function EnsureCleanup()
     end
 end
 
--- protocol: the one the message came in, as a number (2 or 3).
+-- protocol: the one the message came in, as a number (2 to 4).
 local function Deliver(sender, channel, compressed, body, protocol)
     local raw = FromBase64(body)
     if raw and compressed then
@@ -374,7 +376,7 @@ local function OnChunk(text, channel, sender)
         end
         return
     end
-    if protocol ~= PROTOCOL and protocol ~= LEGACY then
+    if protocol ~= PROTOCOL and not LEGACY[protocol] then
         if not newerProtocolNoticed and protocol > PROTOCOL then
             newerProtocolNoticed = true
             ns.Print(ns.L["a guild member uses a newer version of Guild Professions & Recipes that this one cannot talk to. Please update."])
@@ -459,8 +461,10 @@ local function FilterOffline(_, _, message, ...)
 end
 
 function Comm.Init()
-    local result = ns.Try(C_ChatInfo.RegisterAddonMessagePrefix, ns.PREFIX)
-    ns.Debug("prefix registered: %s", tostring(result))
+    for prefix in pairs(ns.LISTEN) do
+        local result = ns.Try(C_ChatInfo.RegisterAddonMessagePrefix, prefix)
+        ns.Debug("prefix %s registered: %s", prefix, tostring(result))
+    end
 
     if type(ERR_CHAT_PLAYER_NOT_FOUND_S) == "string" then
         local pattern = ERR_CHAT_PLAYER_NOT_FOUND_S:gsub("([%(%)%.%%%+%-%*%?%[%]%^%$])", "%%%1"):gsub("%%%%s", "(.+)")
@@ -475,7 +479,7 @@ function Comm.Init()
     ns.RegisterEvents(events, "CHAT_MSG_ADDON")
     events:SetScript("OnEvent", function(_, _, prefix, text, channel, sender)
         prefix = ns.Plain(prefix)
-        if prefix ~= ns.PREFIX then
+        if not ns.LISTEN[prefix] then
             return
         end
         text, channel, sender = ns.Plain(text), ns.Plain(channel), ns.Plain(sender)

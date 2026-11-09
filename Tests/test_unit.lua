@@ -309,6 +309,11 @@ H.check(tocVersion ~= nil, "the TOC has a version")
 H.eq(logVersion, tocVersion, "the changelog's newest entry matches the TOC version")
 -- The packager names the folder after package-as; the game needs it to match the TOC.
 H.eq(ReadFile(".pkgmeta"):match("package%-as: (%S+)"), "GuildProfessionsRecipes", "packaged under the TOC's folder name")
+-- A trial build talks on its own prefix (Core.lua): fine to try in game,
+-- not to release.
+if ReadFile("Core.lua"):find("\nns.TRIAL = true", 1, true) then
+    print("  NOTE: ns.TRIAL is on in Core.lua: turn it off before tagging a release")
+end
 
 H.section("Locales")
 local w3 = H.NewWorld({ seed = 6 })

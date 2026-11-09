@@ -218,7 +218,8 @@ recipeRow._scripts.OnEnter(recipeRow)
 H.check((viewer.Detail.Name._text or ""):find("Item" .. (recipeRow.data.recipeID + 100000), 1, true) ~= nil, "selecting a recipe shows the item it makes")
 H.check((viewer.Detail.Description._text or ""):find(tostring(recipeRow.data.recipeID), 1, true) ~= nil, "and its description")
 H.check((viewer.Detail.reagents[1].Text._text or ""):find("0/2 Item2447", 1, true) ~= nil, "reagents show what we carry over what it takes")
-H.check((viewer.Detail.KnownBy._text or ""):find("Nobody", 1, true) ~= nil, "nobody else knows it")
+H.check((viewer.Detail.KnownBy.Text._text or ""):find("Nobody", 1, true) ~= nil and viewer.Detail.WhoButton._shown == false,
+    "nobody else knows it, and there is nobody to see")
 A.shiftDown = true
 recipeRow._scripts.OnClick(recipeRow)
 A.shiftDown = false
@@ -364,6 +365,8 @@ local probe = A.env.GuildProfessionsRecipesProbe
 local report = probe and probe.Edit and probe.Edit._text or ""
 H.check(report:find("== Own professions", 1, true) ~= nil, "the probe report opens")
 H.check(report:find("section failed", 1, true) == nil, "every probe section runs")
+H.check(report:find("SendMail=yes", 1, true) ~= nil and report:find("ERR_TRADE_COMPLETE: Trade complete.", 1, true) ~= nil,
+    "the probe tells what trades and mail can be read with")
 H.check(report:find("whisper-name via WHISPER", 1, true) ~= nil and report:find("guild via GUILD", 1, true) ~= nil, "the probe hears its own pings")
 H.check(report:find("burst of 12 GUILD pings", 1, true) ~= nil, "the burst test runs")
 H.eq(#world.errors, 0, "probe: no Lua errors")
@@ -602,17 +605,108 @@ do
     H.eq(Listed(), "11,12,13,14", "every recipe some member shared, once each")
     H.check(window.RankBar._shown == false, "no skill bar: a guild has no single skill")
     H.check((window.Updated._text or ""):find("Shared by 2", 1, true) ~= nil, "shared by both members")
-    local known = window.Detail.KnownBy._text or ""
-    H.check(known:find("^Known by: ") ~= nil and known:find("Alice", 1, true) ~= nil and known:find("Bob", 1, true) == nil, "who knows the selected recipe, ourselves included")
-    for _, element in ipairs(window.ScrollBox._provider.elements) do
+    local detail = window.Detail
+    H.check(detail.KnownBy.Text._text == "Known by 1 |4member:members;" and detail.WhoButton._shown ~= false,
+        "how many know the selected recipe, ourselves included")
+    -- Their names on hover.
+    local lines = {}
+    rawset(alice.env.GameTooltip, "AddLine", function(_, text)
+        lines[#lines + 1] = text
+    end)
+    local function Hover()
+        lines = {}
+        detail.KnownBy._scripts.OnEnter(detail.KnownBy)
+        return table.concat(lines, "|")
+    end
+    H.eq(Hover(), "Alice|Click to see who knows it.", "their names on hover")
+    local function Select(recipeID)
+        for _, element in ipairs(window.ScrollBox._provider.elements) do
+            if element.recipeID == recipeID then
+                local row = H.NewObject(alice, "Button")
+                window.ScrollBox._view.init(row, element)
+                row._scripts.OnClick(row)
+            end
+        end
+    end
+    Select(12)
+    H.check(detail.KnownBy.Text._text == "Known by 2 |4member:members;" and Hover() == "Alice|Bob|Click to see who knows it.",
+        "a recipe both know: both, online first, then by name")
+
+    -- Everyone who knows it, in a window of its own.
+    detail.WhoButton._scripts.OnClick(detail.WhoButton)
+    local known = alice.env.GuildProfessionsRecipesKnownBy
+    H.check(known and known._shown, "the button opens who knows it")
+    -- What the recipe makes: its tooltip, and shift-click links it.
+    local tooltipItem
+    rawset(alice.env.GameTooltip, "SetItemByID", function(_, itemID)
+        tooltipItem = itemID
+    end)
+    known.Item._scripts.OnEnter(known.Item)
+    H.eq(tooltipItem, 100012, "pointing at the item shows its tooltip")
+    alice.linked = nil
+    alice.shiftDown = true
+    known.Item._scripts.OnClick(known.Item)
+    alice.shiftDown = false
+    H.check(alice.linked ~= nil, "shift-click on it links the recipe")
+    local function KnownRows()
+        local rows = {}
+        for _, element in ipairs(known.ScrollBox._provider.elements) do
+            local row = H.NewObject(alice, "Frame")
+            known.ScrollBox._view.init(row, element)
+            rows[#rows + 1] = row
+        end
+        return rows
+    end
+    local rows = KnownRows()
+    H.check(#rows == 2 and rows[1].Name._text == "Alice" and rows[2].Name._text == "Bob", "a row for each, with their name")
+    H.check(rows[1].Whisper._enabled == false and rows[1].Order._enabled == false and rows[1].Order.reason == "This is you.",
+        "nothing to do with ourselves")
+    H.check(rows[2].Whisper._enabled ~= false and rows[2].Order._enabled ~= false, "Bob can be whispered and asked for an order")
+    rows[2].Whisper._scripts.OnClick(rows[2].Whisper)
+    H.eq(alice.whispered, "Bob", "Whisper opens a whisper to him")
+    rows[2].Order._scripts.OnClick(rows[2].Order)
+    local form = alice.env.GuildProfessionsRecipesOrderForm
+    H.check(form._shown and form.Personal._checked and form.Target._text == "Bob" and (form.Recipe._text or ""):find("Item100012", 1, true),
+        "Order opens the form, a personal order to him for this recipe")
+    form.Cancel._scripts.OnClick(form.Cancel)
+    -- The window follows the recipe selected.
+    Select(11)
+    H.check(#KnownRows() == 1 and known._shown, "another recipe selected: its own list")
+    Select(12)
+    -- Bob on 0.8 cannot get orders; offline, he cannot be whispered.
+    local bobRecord = alice.ns.Data.CurrentGuild(false).members[bob.guid]
+    local version = bobRecord.av
+    bobRecord.av = 802
+    w:Logout(bob)
+    w:RunFor(5)
+    Select(12)
+    rows = KnownRows()
+    H.check(rows[2].Name._text:find("Bob (Offline)", 1, true) and rows[2].Whisper._enabled == false
+        and rows[2].Whisper.reason == "Bob is offline.", "offline: greyed, and no whisper")
+    H.check(rows[2].Order._enabled == false and rows[2].Order.reason == "Bob needs version 0.9 or later to receive orders.",
+        "on 0.8: no order, saying why")
+    bobRecord.av = version
+    w:Login(bob)
+    w:RunFor(10)
+    known._scripts.OnHide(known)
+    -- Those online come first: seen by Bob, with Alice away.
+    local aliceMember = bob.ns.Roster.members[alice.guid]
+    aliceMember.online = false
+    bob.ns.Viewer.OpenGuild(164)
+    local bobWindow = bob.env.GuildProfessionsRecipesViewer
+    for _, element in ipairs(bobWindow.ScrollBox._provider.elements) do
         if element.recipeID == 12 then
-            local row = H.NewObject(alice, "Button")
-            window.ScrollBox._view.init(row, element)
+            local row = H.NewObject(bob, "Button")
+            bobWindow.ScrollBox._view.init(row, element)
             row._scripts.OnClick(row)
         end
     end
-    known = window.Detail.KnownBy._text or ""
-    H.check(known:find("Alice", 1, true) ~= nil and known:find("Bob", 1, true) ~= nil, "a recipe both know lists both")
+    local order = {}
+    for _, entry in ipairs(bobWindow.Detail.known) do
+        order[#order + 1] = entry.name .. (entry.online and "" or " (away)")
+    end
+    H.eq(table.concat(order, ", "), "Bob, Alice (away)", "those online first, whatever their names")
+    aliceMember.online = true
 
     local tabs = {}
     for _, tab in ipairs(window.Tabs) do
@@ -627,7 +721,7 @@ do
 
     alice.ns.Viewer.OpenMember(bob.guid, 164)
     H.check(Listed() == "12,13,14" and window.RankBar._shown ~= false, "a member's own recipes again, with their skill")
-    H.check((window.Detail.KnownBy._text or ""):find("^Also known by: ") ~= nil, "and the others who know the recipe")
+    H.eq(window.Detail.KnownBy.Text._text, "Also known by 1 |4member:members;", "and how many others know the recipe")
     alice.ns.Viewer.OpenGuild(129)
     H.eq(Listed(), "12,13,14", "a profession nobody shared does not open")
     H.eq(#w.errors, 0, "guild's recipes: no Lua errors")

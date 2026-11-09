@@ -16,6 +16,9 @@ local WATCHED_EVENTS = {
     "NEW_RECIPE_LEARNED", "SKILL_LINES_CHANGED", "LEARNED_SPELL_IN_SKILL_LINE",
     "TRADE_SKILL_SHOW", "TRADE_SKILL_LIST_UPDATE", "TRADE_SKILL_DATA_SOURCE_CHANGED", "TRADE_SKILL_CLOSE",
     "GUILD_ROSTER_UPDATE", "GUILD_TRADESKILL_UPDATE", "SPELL_DATA_LOAD_RESULT",
+    -- What Deliveries.lua counts on.
+    "TRADE_SHOW", "TRADE_PLAYER_ITEM_CHANGED", "TRADE_TARGET_ITEM_CHANGED", "TRADE_MONEY_CHANGED", "TRADE_ACCEPT_UPDATE", "TRADE_CLOSED",
+    "UI_INFO_MESSAGE", "MAIL_SEND_INFO_UPDATE", "MAIL_SEND_SUCCESS", "MAIL_FAILED", "MAIL_INBOX_UPDATE",
 }
 
 local TradeSkill = C_TradeSkillUI or {}
@@ -286,6 +289,20 @@ local function NativeGuildSection()
         tostring(list and list.ColumnDisplay and list.ColumnDisplay.columnHeaders ~= nil), list and Values(ns.Try(list.GetGuildColumnIndex, list)) or "-")
 end
 
+-- The functions Deliveries.lua reads trades and mail with.
+local function DeliveriesSection()
+    Section("Trade and mail")
+    local names = { "GetTradePlayerItemInfo", "GetTradePlayerItemLink", "GetTradeTargetItemInfo", "GetTradeTargetItemLink",
+        "GetTargetTradeMoney", "SendMail", "GetSendMailItem", "GetSendMailItemLink", "TakeInboxItem", "TakeInboxMoney", "AutoLootMailItem", "GetInboxHeaderInfo",
+        "GetInboxItem", "GetInboxItemLink" }
+    local found = {}
+    for i, name in ipairs(names) do
+        found[i] = name .. "=" .. (type(_G[name]) == "function" and "yes" or "no")
+    end
+    Add("%s; C_Mail.SendMail=%s", table.concat(found, " "), tostring(C_Mail ~= nil and type(C_Mail.SendMail) == "function"))
+    Add("ERR_TRADE_COMPLETE: %s; NPC: %s", tostring(ERR_TRADE_COMPLETE), Values(UnitGUID("NPC")))
+end
+
 local function EventsSection()
     Section("Events since login")
     for _, event in ipairs(WATCHED_EVENTS) do
@@ -359,7 +376,7 @@ end
 function Probe.Run(burst)
     lines = {}
     Add("Guild Professions & Recipes probe, %s", date("%Y-%m-%d %H:%M:%S"))
-    for _, section in ipairs({ ClientSection, SavedDataSection, GuildSection, ProfessionsSection, SessionSection, LookupSection, NativeGuildSection, EventsSection }) do
+    for _, section in ipairs({ ClientSection, SavedDataSection, GuildSection, ProfessionsSection, SessionSection, LookupSection, NativeGuildSection, DeliveriesSection, EventsSection }) do
         local ok, err = pcall(section)
         if not ok then
             Add("!! section failed: %s", tostring(err))

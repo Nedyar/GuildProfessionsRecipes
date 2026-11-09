@@ -16,8 +16,10 @@ professions and recipes of every member of your guild.
 - **Recipe window.** The saved recipes, in a copy of the game's own
   profession window: recipes by category with search (by recipe, item made
   or reagent, as in the game), the item each one
-  makes, its reagents (with how many you carry) and who else in the guild
-  knows it. It works while the member is offline, and says that the data is
+  makes, its reagents (with how many you carry) and how many others in the
+  guild know it, with their names on hover. **See who knows it** lists them
+  all, those online first, with buttons to whisper them or to ask them for
+  an order. It works while the member is offline, and says that the data is
   saved and how old it is. Shift-click a recipe to link it in chat. Where
   the game has its crafting controls there is a **Request an order** button
   for the selected recipe (see Crafting orders).
@@ -28,28 +30,49 @@ professions and recipes of every member of your guild.
     recipe saying who knows it. The others are disabled, and their tooltip
     says why.
   - **Pending orders:** orders for you, personal ones to accept or decline,
-    and those you accepted, to complete or release.
+    and those you accepted, to mark their materials received, to complete
+    or to release.
   - **Order list:** the open orders, to accept. By default it shows only
     those whose recipe you know, and hides those of your own characters.
-  - **Requested orders:** yours, to modify or cancel while nobody has taken
-    them, to finish once completed, and to delete once finished, cancelled
-    or expired.
+  - **Requested orders:** yours, to modify while nobody has taken them, to
+    cancel or finish until they are over, and to delete once finished or
+    cancelled.
 - **Crafting orders.** Ask a guildmate to craft a recipe for you:
   - **Open**, so anyone who knows the recipe may accept it, or **Personal**,
     for one member you pick from those who know it.
   - Say whether you provide the materials and add a tip in gold, silver and
-    copper; choose the quantity and how many days the order lasts (7 by
-    default); add a note.
-  - The crafter marks it completed, then you mark it finished. A crafter
-    who cannot make it after all releases it, and it is open again.
+    copper; choose the quantity; add a note. Orders do not expire: they stay
+    until you cancel or finish them.
+  - If you provide the materials, the accepted order waits for them until
+    the crafter has them. The crafter marks it completed, then you mark it
+    finished. A crafter who cannot make it after all releases it, and it is
+    open again. You may cancel it any time before it is over, and finish it
+    as soon as you have it.
+  - **Deliveries are counted.** What changes hands between the requester
+    and the crafter, by trade or by mail and in as many goes as needed,
+    moves the order on by itself: the materials, once all are given, are
+    received; the items, once all are given, complete the order, and
+    finish it once its requester has them all. The lists show how many
+    items are delivered. Crafting the recipe counts for nothing, since the
+    crafter may be making it for anyone. The buttons do whatever the addon
+    cannot see, such as items handed over through another character.
+  - **The tip.** The money the crafter gets from the requester, by trade or
+    by mail, counts towards the tip, and the lists show whether it is paid.
+    An order with a tip is finished only once its crafter has the tip: if
+    the items are already in, it then finishes by itself. The crafter's
+    **Tip paid** button marks a tip paid where the addon could not see it,
+    or forgives it.
   - Clicking an order in a list shows its recipe among the guild's in the
-    recipe window, with its reagents and who knows it.
-  - You are told in the chat when an order is directed to you or when one of
-    yours is accepted, declined, completed, released or expires, also of
-    changes made while you were offline. Blizzard's notification mark shows
-    on the tab while an order waits for you.
+    recipe window, with its reagents and who knows it. In Pending orders,
+    an order whose recipe you know opens in the game's own profession
+    window instead, selected, ready to craft.
+  - You are told in the chat when an order is directed to you, when one of
+    yours is accepted, declined, released or completed or its materials are
+    received, and when an order you accepted is cancelled, also of changes
+    made while you were offline. Blizzard's notification mark shows on the
+    tab while an order waits for you.
   - Orders travel like the rest of the data, so they reach members who are
-    offline when they log in. Members need version 0.8 or later to see
+    offline when they log in. Members need version 0.9 or later to see
     them.
 - **Filters.** The window's Filter menu has two of the game's own entries:
   - **Have Materials** keeps the recipes whose reagents you carry in your
@@ -122,14 +145,20 @@ every client turns them into names in its own language.
   all clients end up with the same data. Members who leave the guild are
   dropped after 30 days.
 - **Crafting orders.** An order is kept in its requester's data, and each
-  crafter's answer (accepted, declined, completed) in that crafter's, so the
-  same rule holds. Every client works out an order's state from both: when
-  two crafters accept an open order at once, the earlier acceptance wins
-  everywhere. Finished, cancelled and expired orders are dropped three days
-  later, or at once when their requester deletes them.
-- **Versions.** Version 0.8 changed the messages to carry orders. It still
-  reads what members on 0.7 announce, but 0.7 cannot read 0.8, so members
-  on 0.7 are asked to update.
+  crafter's answer (accepted, declined, materials received, completed, how
+  many items they delivered and how much of the tip they received) in that
+  crafter's, so the same rule holds.
+  Every client works out an order's state from both: when two crafters
+  accept an open order at once, the earlier acceptance wins everywhere.
+  Finished and cancelled orders are dropped three days later, or at once
+  when their requester deletes them. Deliveries are counted by the client
+  whose data they change: the crafter's counts the materials received, the
+  items given and the tip received, the requester's the items received.
+- **Versions.** Version 0.8 changed the messages to carry orders, and 0.9
+  changed them again for orders without expiry and the deliveries. 0.9
+  still reads what members on 0.7 and 0.8 announce, but they cannot read
+  0.9, so they are asked to update. Until they do, their orders are not
+  listed.
 
 ## Files
 
@@ -149,6 +178,7 @@ every client turns them into names in its own language.
 | `Orders.lua` | Crafting orders: their states, our changes, the clean-up |
 | `OrderForm.lua` | The window to request or change an order |
 | `OrderList.lua` | The order lists of the guild window tab, and the notices |
+| `Deliveries.lua` | Trades and mail with guildmates, counted towards their orders |
 | `Probe.lua` | `/grecipes probe` |
 | `Tests\` | Offline tests (not loaded by the game) |
 | `.github\logo.png` | The project logo (not part of the addon) |
@@ -173,9 +203,10 @@ lua5.1 Tests\run.lua <path to GuildProfessionsRecipes> <path to GuildProfessions
   install, and WoW Forever's ways: names with spaces, members on several
   realms, senders without a realm and whispers by name only.
 - `orders`: the record format with orders, their states, open and personal
-  orders between several clients (online, offline, at the same time),
-  expiry, the request form, the order lists and the notices, and members
-  still on 0.7.
+  orders between several clients (online, offline, at the same time), the
+  clean-up, the request form, the order lists and the notices, deliveries
+  and tips by trade and mail (in several goes, cancelled, refused, with
+  full bags), and members still on 0.7 or 0.8.
 - `ui`: the roster column, the guild window tab and the recipe window on
   stand-ins for Blizzard's frames, the slash commands and the probe.
 
@@ -185,6 +216,10 @@ CurseForge packages every tagged commit pushed to this repository.
 
 1. Raise `## Version` in `GuildProfessionsRecipes.toc` and add that version's
    entry at the top of `CHANGELOG.md`. The tests check that both match.
+   While a version with a new protocol is tried in game, `ns.TRIAL` in
+   `Core.lua` keeps it on an addon-message prefix of its own, so members on
+   the released version are not asked to update yet. Set it to `false` for
+   the release; the tests print a note while it is on.
 2. Commit, tag the commit `v<version>` and push the tag:
    `git push origin v<version>`. A tag containing `beta` or `alpha` makes a
    beta or alpha file instead of a release.

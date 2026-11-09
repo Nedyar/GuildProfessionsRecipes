@@ -39,7 +39,8 @@ local MAX_TABS = 16
 -- bottom, TAB_GAP apart. Their height is the game's (set at run time; about
 -- 55 in WoW Forever).
 local TAB_TOP, TAB_BOTTOM, TAB_GAP, TAB_HEIGHT = 60, 8, 2, 55
-local MAX_KNOWN_BY = 12
+local MAX_KNOWN_BY = 15                -- names in the "known by" tooltip; its window lists all
+local KNOWN_ROW_HEIGHT = 26
 local UNKNOWN_ICON = 134400
 local REAGENT_MASK = 2922105         -- the rounded square that crops reagent icons
 local SLOT_BORDER = 130841           -- Interface\Buttons\UI-Quickslot2
@@ -67,6 +68,7 @@ local CREATED_ITEMS_ORDER = #SLOT_TYPES + 2
 local GATHERING = { Mining = true, Herbalism = true, Skinning = true, Fishing = true }
 
 local frame
+local knownWindow  -- who knows the selected recipe (Viewer.ShowKnownBy)
 -- guild: true while showing all the guild's recipes of a profession (key is
 -- nil then), false while showing one member's.
 local state = { guild = false, key = nil, skillLine = nil, recipeID = nil, search = "", slots = {} }
@@ -232,6 +234,16 @@ local function BasicReagents(schematic)
         end
     end
     return reagents
+end
+
+-- What an order of a recipe is counted in (Deliveries.lua): the item it
+-- makes (nil for an enchantment), how many of it each craft makes, and its
+-- basic reagents (nil when the game gives no schematic).
+function Viewer.OrderItems(recipeID)
+    local info = ResolveRecipe(recipeID)
+    local schematic = info.schematic
+    local perCraft = type(schematic) == "table" and tonumber(schematic.quantityMin) or 1
+    return info.itemID, math.max(math.floor(perCraft or 1), 1), BasicReagents(schematic)
 end
 
 -- Filters ---------------------------------------------------------------------------
@@ -731,26 +743,53 @@ local function ShowReagents(detail, recipeID, info)
     detail.KnownBy:SetPoint("TOPLEFT", detail.Reagents, "TOPLEFT", 0, -height - 16)
 end
 
--- The members of the guild who know the recipe: the others, when showing
--- one member's recipes.
+-- The members of the guild who know the recipe (the others, when showing
+-- one member's recipes): { guid, name, online }, those online first.
 local function KnownBy(recipeID)
     local guild = ns.Data.CurrentGuild(false)
-    local names = {}
+    local list = {}
     for key, record in pairs(guild and guild.members or {}) do
         local prof = key ~= state.key and record.p[state.skillLine]
         if prof and type(prof.k) == "table" and Contains(prof.k, recipeID) then
-            names[#names + 1] = ns.Data.NameOf(key, record)
+            local online = key == ns.playerGUID or ns.Roster.IsOnline(key) == true
+            list[#list + 1] = { guid = key, name = ns.Data.NameOf(key, record), online = online }
         end
     end
-    table.sort(names)
-    local count = #names
-    if count > MAX_KNOWN_BY then
-        for i = count, MAX_KNOWN_BY + 1, -1 do
-            names[i] = nil
+    table.sort(list, function(a, b)
+        if a.online ~= b.online then
+            return a.online
         end
-        names[#names + 1] = L["and %d more"]:format(count - MAX_KNOWN_BY)
+        return a.name < b.name
+    end)
+    return list
+end
+
+local function OfflineColor()
+    return Color(GRAY_FONT_COLOR, 0.5, 0.5, 0.5)
+end
+
+-- The line under the reagents: how many know the recipe, their names on
+-- hover.
+local function KnownByOnEnter(button)
+    local known = frame.Detail.known
+    if not known or #known == 0 then
+        return
     end
-    return names
+    GameTooltip:SetOwner(button, "ANCHOR_RIGHT")
+    GameTooltip:SetText(button.Text:GetText() or "", 1, 1, 1)
+    for i = 1, math.min(#known, MAX_KNOWN_BY) do
+        local entry = known[i]
+        local r, g, b = 1, 1, 1
+        if not entry.online then
+            r, g, b = OfflineColor():GetRGB()
+        end
+        GameTooltip:AddLine(entry.name, r, g, b)
+    end
+    if #known > MAX_KNOWN_BY then
+        GameTooltip:AddLine(L["and %d more"]:format(#known - MAX_KNOWN_BY), NORMAL_FONT_COLOR:GetRGB())
+    end
+    GameTooltip:AddLine(L["Click to see who knows it."], GREEN_FONT_COLOR:GetRGB())
+    GameTooltip:Show()
 end
 
 local function UpdateDetail()
@@ -790,9 +829,168 @@ local function UpdateDetail()
     end
     detail.Description:SetText(type(description) == "string" and description or "")
     ShowReagents(detail, recipeID, info)
-    local names = KnownBy(recipeID)
-    local knownBy = state.guild and L["Known by: %s"] or L["Also known by: %s"]
-    detail.KnownBy:SetText(#names > 0 and knownBy:format(table.concat(names, ", ")) or L["Nobody else in the guild is known to have this recipe."])
+    local known = KnownBy(recipeID)
+    detail.known = known
+    local text = L["Nobody else in the guild is known to have this recipe."]
+    if #known > 0 then
+        text = (state.guild and L["Known by %d |4member:members;"] or L["Also known by %d |4member:members;"]):format(#known)
+    end
+    detail.KnownBy.Text:SetText(text)
+    detail.KnownBy:EnableMouse(#known > 0)
+    detail.WhoButton:SetShown(#known > 0)
+    if knownWindow and knownWindow:IsShown() then
+        Viewer.ShowKnownBy()
+    end
+end
+
+-- Who knows a recipe ----------------------------------------------------------------
+
+local function SendTell(name)
+    if ChatFrameUtil and ChatFrameUtil.SendTell then
+        ChatFrameUtil.SendTell(name)
+    elseif ChatFrame_SendTell then
+        ChatFrame_SendTell(name)
+    end
+end
+
+local function KnownButtonOnEnter(button)
+    if button.reason then
+        GameTooltip:SetOwner(button, "ANCHOR_RIGHT")
+        GameTooltip:SetText(button.reason, 1, 1, 1, 1, true)
+        GameTooltip:Show()
+    end
+end
+
+local function KnownButton(row, text)
+    local button = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+    button:SetSize(76, 20)
+    button:SetText(text)
+    button:SetMotionScriptsWhileDisabled(true)
+    button:SetScript("OnEnter", KnownButtonOnEnter)
+    button:SetScript("OnLeave", GameTooltip_Hide)
+    return button
+end
+
+-- A row: the member's name (grey while offline), and buttons to whisper
+-- them or to ask them for an order.
+local function InitKnownRow(row, entry)
+    if not row.Name then
+        row.Order = KnownButton(row, L["Order"])
+        row.Order:SetPoint("RIGHT", -4, 0)
+        row.Order:SetScript("OnClick", function()
+            ns.OrderForm.Open(knownWindow.skillLine, knownWindow.recipeID, nil, row.entry.guid)
+        end)
+        row.Whisper = KnownButton(row, WHISPER or "Whisper")
+        row.Whisper:SetPoint("RIGHT", row.Order, "LEFT", -4, 0)
+        row.Whisper:SetScript("OnClick", function()
+            SendTell(row.entry.name)
+        end)
+        row.Name = row:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+        row.Name:SetPoint("LEFT", 6, 0)
+        row.Name:SetPoint("RIGHT", row.Whisper, "LEFT", -6, 0)
+        row.Name:SetJustifyH("LEFT")
+        row.Name:SetWordWrap(false)
+    end
+    row.entry = entry
+    if entry.online then
+        row.Name:SetText(entry.name)
+    else
+        row.Name:SetText(Paint(("%s (%s)"):format(entry.name, FRIENDS_LIST_OFFLINE or "Offline"), OfflineColor()))
+    end
+    local you = entry.guid == ns.playerGUID
+    row.Whisper:SetEnabled(not you and entry.online)
+    row.Whisper.reason = you and L["This is you."] or not entry.online and L["%s is offline."]:format(entry.name) or nil
+    -- "0.9", as the version is spoken of.
+    local version = ns.VersionString(ns.Orders.MIN_VERSION):gsub("%.0$", "")
+    row.Order:SetEnabled(not you and entry.canOrder)
+    row.Order.reason = you and L["This is you."]
+        or not entry.canOrder and L["%s needs version %s or later to receive orders."]:format(entry.name, version)
+        or nil
+end
+
+local function CreateKnownWindow()
+    knownWindow = CreateFrame("Frame", "GuildProfessionsRecipesKnownBy", UIParent, "PortraitFrameTemplate")
+    knownWindow:SetSize(340, 420)
+    knownWindow:SetFrameStrata("HIGH")
+    knownWindow:SetToplevel(true)
+    knownWindow:SetClampedToScreen(true)
+    knownWindow:SetMovable(true)
+    knownWindow:EnableMouse(true)
+    knownWindow:RegisterForDrag("LeftButton")
+    knownWindow:SetScript("OnDragStart", knownWindow.StartMoving)
+    knownWindow:SetScript("OnDragStop", knownWindow.StopMovingOrSizing)
+    knownWindow:Hide()
+    tinsert(UISpecialFrames, knownWindow:GetName())
+    knownWindow:SetTitle(L["Who knows it"])
+    -- Right of the portrait (the profession's), what the recipe makes, as on
+    -- the order form: its tooltip, and shift-click links the recipe.
+    local item = CreateFrame("Button", nil, knownWindow)
+    item:SetSize(32, 32)
+    item:SetPoint("TOPLEFT", 62, -30)
+    item.Icon = item:CreateTexture(nil, "ARTWORK")
+    item.Icon:SetAllPoints()
+    item:SetHighlightTexture(SLOT_HIGHLIGHT, "ADD")
+    item:SetScript("OnEnter", function(self)
+        Viewer.ShowOutputTooltip(self, knownWindow.recipeID)
+    end)
+    item:SetScript("OnLeave", GameTooltip_Hide)
+    item:SetScript("OnClick", function()
+        if IsModifiedClick("CHATLINK") then
+            Viewer.LinkRecipe(knownWindow.recipeID)
+        end
+    end)
+    knownWindow.Item = item
+    knownWindow.Recipe = knownWindow:CreateFontString(nil, "ARTWORK", "GameFontHighlightMed2")
+    knownWindow.Recipe:SetPoint("LEFT", item, "RIGHT", 8, 0)
+    knownWindow.Recipe:SetPoint("RIGHT", -12, 0)
+    knownWindow.Recipe:SetJustifyH("LEFT")
+    knownWindow.Recipe:SetWordWrap(false)
+    local scrollBox = CreateFrame("Frame", nil, knownWindow, "WowScrollBoxList")
+    scrollBox:SetPoint("TOPLEFT", 12, -70)
+    scrollBox:SetPoint("BOTTOMRIGHT", -28, 12)
+    local scrollBar = CreateFrame("EventFrame", nil, knownWindow, "MinimalScrollBar")
+    scrollBar:SetPoint("TOPLEFT", scrollBox, "TOPRIGHT", 6, 0)
+    scrollBar:SetPoint("BOTTOMLEFT", scrollBox, "BOTTOMRIGHT", 6, 0)
+    local view = CreateScrollBoxListLinearView(0, 0, 0, 0, 0)
+    view:SetElementExtent(KNOWN_ROW_HEIGHT)
+    view:SetElementInitializer("Frame", InitKnownRow)
+    ScrollUtil.InitScrollBoxListWithScrollBar(scrollBox, scrollBar, view)
+    knownWindow.ScrollBox = scrollBox
+    knownWindow:SetScript("OnHide", GameTooltip_Hide)
+end
+
+-- Opens (or refreshes) the window listing who knows the selected recipe,
+-- with buttons to whisper them or to ask them for an order.
+function Viewer.ShowKnownBy()
+    local recipeID = state.recipeID
+    if not recipeID then
+        if knownWindow then
+            knownWindow:Hide()
+        end
+        return
+    end
+    if not knownWindow then
+        CreateKnownWindow()
+    end
+    local canOrder = {}
+    for _, crafter in ipairs(ns.Orders.Crafters(ns.Data.CurrentGuild(false), state.skillLine, recipeID)) do
+        canOrder[crafter.guid] = true
+    end
+    local entries = frame.Detail.known or KnownBy(recipeID)
+    for _, entry in ipairs(entries) do
+        entry.canOrder = canOrder[entry.guid] == true
+    end
+    knownWindow.recipeID, knownWindow.skillLine = recipeID, state.skillLine
+    local info = ResolveRecipe(recipeID)
+    knownWindow:SetPortraitToAsset(ns.ProfessionIcon(state.skillLine))
+    knownWindow.Item.Icon:SetTexture(info.icon or UNKNOWN_ICON)
+    knownWindow.Recipe:SetText(OutputName(recipeID, info))
+    knownWindow.ScrollBox:SetDataProvider(CreateDataProvider(entries), ScrollBoxConstants and ScrollBoxConstants.RetainScrollPosition)
+    if not knownWindow:IsShown() then
+        knownWindow:ClearAllPoints()
+        knownWindow:SetPoint("TOPLEFT", frame, "TOPRIGHT", 10, 0)
+        knownWindow:Show()
+    end
 end
 
 -- Header, tabs, status --------------------------------------------------------------
@@ -1204,10 +1402,25 @@ local function CreatePanel(page, list)
         detail.reagents[i] = CreateReagentSlot(reagents, i)
     end
 
-    detail.KnownBy = content:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall2")
-    detail.KnownBy:SetWidth(305)
-    detail.KnownBy:SetJustifyH("LEFT")
-    detail.KnownBy:SetSpacing(2)
+    -- Who else knows it: how many, their names on hover, all of them (with
+    -- whisper and order buttons) in a window of their own.
+    detail.KnownBy = CreateFrame("Button", nil, content)
+    detail.KnownBy:SetSize(180, 20)
+    detail.KnownBy.Text = detail.KnownBy:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall2")
+    detail.KnownBy.Text:SetPoint("LEFT")
+    detail.KnownBy.Text:SetJustifyH("LEFT")
+    detail.KnownBy:SetScript("OnEnter", KnownByOnEnter)
+    detail.KnownBy:SetScript("OnLeave", GameTooltip_Hide)
+    detail.KnownBy:SetScript("OnClick", function()
+        Viewer.ShowKnownBy()
+    end)
+    detail.WhoButton = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
+    detail.WhoButton:SetSize(130, 20)
+    detail.WhoButton:SetPoint("LEFT", detail.KnownBy.Text, "RIGHT", 10, 0)
+    detail.WhoButton:SetText(L["See who knows it"])
+    detail.WhoButton:SetScript("OnClick", function()
+        Viewer.ShowKnownBy()
+    end)
 
     -- Where Blizzard's Track Recipe sits: where these recipes come from.
     frame.Updated = detail:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
@@ -1358,6 +1571,21 @@ function Viewer.ShowProfession(guid, skillLine)
         end
     end
     Viewer.OpenMember(guid, skillLine)
+end
+
+-- One of our own recipes in the game's profession window, selected, the way
+-- the game opens a tracked recipe; else at least its profession. Returns
+-- true when the game opened it.
+function Viewer.OpenRecipeInGame(skillLine, recipeID)
+    local util = ProfessionsUtil
+    if util and util.OpenProfessionFrameToRecipe then
+        local ok, opened = pcall(util.OpenProfessionFrameToRecipe, recipeID)
+        if ok and opened then
+            return true
+        end
+    end
+    local ok, opened = pcall(TradeSkill.OpenTradeSkill, skillLine)
+    return ok and opened ~= false
 end
 
 -- name: what the user typed ("Name", "name", "Name-Realm"), or nil for our

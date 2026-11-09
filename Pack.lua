@@ -18,13 +18,14 @@ Pack.LIMITS = {
     answers = 60,      -- answers a member has given to others' orders
     note = 200,        -- bytes of an order's note
     quantity = 999,
-    days = 30,         -- how long an order may stay open
+    days = 30,         -- how long an order of 0.8 (format 3) lasted
     tip = 100000000,   -- copper: 10,000 gold
 }
 
--- The record format this version writes: 3 adds crafting orders (0.8).
--- Format 2 (0.2 to 0.7) is still read.
-Pack.FORMAT = 3
+-- The record format this version writes: 3 added crafting orders (0.8), 4
+-- drops their expiry and counts deliveries (0.9). Formats 2 (0.2 to 0.7)
+-- and 3 are still read.
+Pack.FORMAT = 4
 
 local TWO_32 = 4294967296
 local TWO_53 = 9007199254740992
@@ -165,14 +166,16 @@ end
 --   { n = their name, t = time of their last change, av = addon version,
 --     p = { [skillLineID] = { r = rank, m = max rank, o = display order,
 --                             lk = the profession's spell, k = recipes } },
---     o = the crafting orders they requested (format 3, see Orders.lua):
+--     o = the crafting orders they requested (from format 3, see Orders.lua):
 --         { [id] = { sl, r = recipe, q = quantity, d = GUID it is directed
 --                    to or nil, m = they provide the materials, tip = copper,
---                    note, c = created, u = updated, e = days it lasts,
---                    s = state } },
---     a = their answers to others' orders (format 3):
+--                    note, c = created, u = updated, s = state,
+--                    e = days it lasted, in format 3 only } },
+--     a = their answers to others' orders (from format 3):
 --         { ["<requester GUID>:<id>"] = { s = state, u = time,
---                                         ou = the order's u answered } } }
+--                                         ou = the order's u answered,
+--                                         n = items delivered, p = copper
+--                                         of the tip received (format 4) } } }
 -- k is a sorted list of recipe IDs, false for professions without recipes,
 -- or nil while the owner's recipes have not been read.
 local K_UNKNOWN, K_NONE, K_LIST = 0, 1, 2
@@ -188,7 +191,7 @@ end
 
 -- Each list starts with its count plus one, or 0 when unknown (nil): a
 -- client that lost its data does not tell the guild it has no orders.
-local function WriteOrders(writer, record)
+local function WriteOrders(writer, record, format)
     local orders = record.o or {}
     local ids = SortedKeys(orders)
     writer:UInt(record.o and #ids + 1 or 0)
@@ -204,7 +207,9 @@ local function WriteOrders(writer, record)
         writer:Str(order.note or "")
         writer:UInt(order.c)
         writer:UInt(order.u)
-        writer:UInt(order.e)
+        if format == 3 then
+            writer:UInt(order.e or Pack.LIMITS.days)
+        end
         writer:Byte(order.s or 0)
     end
     local answers = record.a or {}
@@ -216,10 +221,14 @@ local function WriteOrders(writer, record)
         writer:Byte(answer.s)
         writer:UInt(answer.u)
         writer:UInt(answer.ou)
+        if format >= 4 then
+            writer:UInt(answer.n or 0)
+            writer:UInt(answer.p or 0)
+        end
     end
 end
 
-local function ReadOrders(reader, record)
+local function ReadOrders(reader, record, format)
     local count = reader:UInt()
     if count > Pack.LIMITS.orders + 1 then
         error("too many orders", 0)
@@ -233,7 +242,11 @@ local function ReadOrders(reader, record)
         order.m = reader:Byte() == 1
         order.tip = reader:UInt()
         order.note = reader:Str(Pack.LIMITS.note)
-        order.c, order.u, order.e, order.s = reader:UInt(), reader:UInt(), reader:UInt(), reader:Byte()
+        order.c, order.u = reader:UInt(), reader:UInt()
+        if format == 3 then
+            order.e = reader:UInt()
+        end
+        order.s = reader:Byte()
         record.o[id] = order
     end
     count = reader:UInt()
@@ -243,7 +256,13 @@ local function ReadOrders(reader, record)
     record.a = count > 0 and {} or nil
     for _ = 2, count do
         local key = reader:Str()
-        record.a[key] = { s = reader:Byte(), u = reader:UInt(), ou = reader:UInt() }
+        local answer = { s = reader:Byte(), u = reader:UInt(), ou = reader:UInt() }
+        if format >= 4 then
+            local delivered, tip = reader:UInt(), reader:UInt()
+            answer.n = delivered > 0 and delivered or nil
+            answer.p = tip > 0 and tip or nil
+        end
+        record.a[key] = answer
     end
 end
 
@@ -271,8 +290,9 @@ function Pack.WriteRecord(writer, guid, record, format)
             Pack.WriteList(writer, prof.k)
         end
     end
-    if (format or Pack.FORMAT) >= 3 then
-        WriteOrders(writer, record)
+    format = format or Pack.FORMAT
+    if format >= 3 then
+        WriteOrders(writer, record, format)
     end
 end
 
@@ -306,8 +326,9 @@ function Pack.ReadRecord(reader, format)
         end
         record.p[skillLine] = prof
     end
-    if (format or Pack.FORMAT) >= 3 then
-        ReadOrders(reader, record)
+    format = format or Pack.FORMAT
+    if format >= 3 then
+        ReadOrders(reader, record, format)
     end
     return guid, record
 end

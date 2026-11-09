@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.9.0 - Orders that move on by themselves
+
+- **Members on 0.8 must update.** Orders changed again. Members on 0.8 see a "newer version" notice, and their orders are not listed until they update.
+- **Orders no longer expire.** They stay until their requester cancels or finishes them, and the form no longer asks for days. Orders that had already expired are cancelled when you update.
+- **Waiting for materials:** once accepted, an order whose requester provides the materials waits for them. Its crafter marks them **Received**.
+- **Deliveries are counted**, by trade or by mail, in as many goes as needed. The lists show how many items are delivered.
+  - The materials the requester gives the crafter: with all of them, they are received.
+  - The items the crafter gives the requester: with all of them, the order is completed.
+  - The items the requester gets from the crafter: with all of them, the order is finished.
+- **The tip is counted too**: the money the crafter gets from the requester, by trade or by mail, up to the tip. The lists show whether it is paid or how much is missing.
+  - An order with a tip cannot be finished until its crafter has the tip. Once the items are all in, the order finishes by itself as soon as the tip is.
+  - The crafter's **Tip paid** button marks a tip paid in a way the addon cannot see, or forgives it.
+- Crafting the recipe counts for nothing: the crafter may be making it for anyone. **The buttons still work** for whatever the addon cannot see.
+- **Cancel an order even once taken**, and **finish it** as soon as you have it, before its crafter marks it completed. A crafter is told when an order they accepted is cancelled.
+- **Pending orders open where you craft:** a click on one of your pending orders opens its recipe in the game's own profession window, selected.
+- **Who knows a recipe:** the recipe panel says how many others know it, with their names on hover. **See who knows it** lists them all, those online first, with buttons to **whisper** them or to ask them for an **order**.
+
 ## 0.8.2 - From an order to its recipe
 
 - **Click an order** in any of the order lists, or its icon, to open its recipe in the recipe window. It shows among your guild's recipes, selected and in view, with its reagents and who knows it.
