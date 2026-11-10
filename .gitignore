@@ -6,6 +6,9 @@ SavedVariables/
 GuildProfessionsRecipes.lua
 *.lua.bak
 
+# Test output, and the releases extracted to test against them
+Tests/out/
+
 # Release packages
 *.zip
 

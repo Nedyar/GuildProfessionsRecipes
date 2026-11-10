@@ -3,7 +3,6 @@ local _, ns = ...
 
 ns.RegisterLocale("deDE", function(L)
     -- "Aktualisiert: %s her" below: "3 Tage her", "wenige Sekunden her".
-    L["a moment"] = "wenige Sekunden"
 
     -- Chat
     L["/grecipes - your own professions"] = "/grecipes - deine eigenen Berufe"
@@ -31,18 +30,6 @@ ns.RegisterLocale("deDE", function(L)
     L["running the probe; the report opens in a few seconds."] = "Test läuft; der Bericht öffnet sich in wenigen Sekunden."
 
     -- Sync
-    L["a guild member uses a newer version of Guild Professions & Recipes that this one cannot talk to. Please update."] = "ein Gildenmitglied nutzt eine neuere Version von Guild Professions & Recipes, mit der diese nicht kommunizieren kann. Bitte aktualisiere das Addon."
-    L["a newer version of Guild Professions & Recipes (%s) is in use in your guild."] = "in deiner Gilde wird eine neuere Version von Guild Professions & Recipes (%s) verwendet."
-    L["sync finished: %d |4record:records; received from %s."] = "Synchronisierung abgeschlossen: %d |4Eintrag:Einträge; von %s erhalten."
-    L["a sync is already running."] = "es läuft bereits eine Synchronisierung."
-    L["nobody online has data you are missing."] = "niemand, der online ist, hat Daten, die dir fehlen."
-    L["asking the guild for missing data..."] = "frage die Gilde nach fehlenden Daten..."
-    L["waiting for offers"] = "warte auf Angebote"
-    L["receiving from %s (%d |4record:records; so far)"] = "empfange von %s (bisher %d |4Eintrag:Einträge;)"
-    L["sending to %d |4member:members;"] = "sende an %d |4Mitglied:Mitglieder;"
-    L["%d |4message:messages; queued (%d |4part:parts;)"] = "%d |4Nachricht:Nachrichten; in der Warteschlange (%d |4Teil:Teile;)"
-    L["paused: addon messages are blocked here"] = "pausiert: Addon-Nachrichten sind hier gesperrt"
-    L["idle"] = "inaktiv"
 
     -- Roster
     L["Professions"] = "Berufe"

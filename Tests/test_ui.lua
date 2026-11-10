@@ -731,7 +731,7 @@ do
     known._scripts.OnHide(known)
     -- Those online come first: seen by Bob, with Alice away.
     local aliceMember = bob.ns.Roster.members[alice.guid]
-    aliceMember.online = false
+    aliceMember.on = false
     bob.ns.Viewer.OpenGuild(164)
     local bobWindow = bob.env.GuildProfessionsRecipesViewer
     for _, element in ipairs(bobWindow.ScrollBox._provider.elements) do
@@ -746,7 +746,7 @@ do
         order[#order + 1] = entry.name .. (entry.online and "" or " (away)")
     end
     H.eq(table.concat(order, ", "), "Bob, Alice (away)", "those online first, whatever their names")
-    aliceMember.online = true
+    aliceMember.on = true
 
     local tabs = {}
     for _, tab in ipairs(window.Tabs) do

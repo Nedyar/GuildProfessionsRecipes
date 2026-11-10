@@ -103,7 +103,9 @@ professions and recipes of every member of your guild.
 
 ## Installing
 
-1. Copy the `GuildProfessionsRecipes` folder into
+1. The addon needs **LibGuildSync**, the shared code of the guild addons;
+   the CurseForge app installs it with Guild Professions & Recipes. By hand,
+   copy both the `GuildProfessionsRecipes` and `LibGuildSync` folders into
    `World of Warcraft\_forever_\Interface\AddOns\`.
 2. Log in and open each of your profession windows once, so the addon can
    read the recipes. Once any character of your account has opened a
@@ -189,12 +191,14 @@ every client turns them into names in its own language.
 
 ## Tests
 
-The tests run the real addon files in a simulated world: a virtual clock,
-a guild roster and a fake server that delivers addon messages between many
-clients, with the server's send limits. They need a Lua 5.1 interpreter:
+The tests run the real files of LibGuildSync and the addon in a simulated
+world: a virtual clock, a guild roster and a fake server that delivers addon
+messages between many clients, with the server's send limits. The harness is
+LibGuildSync's, so its folder must be next to this one. They need a Lua 5.1
+interpreter:
 
 ```
-lua5.1 Tests\run.lua <path to GuildProfessionsRecipes> <path to GuildProfessionsRecipes\Tests> [unit] [sync] [orders] [ui]
+lua5.1 Tests\run.lua <path to GuildProfessionsRecipes> <path to GuildProfessionsRecipes\Tests> [unit] [sync] [orders] [ui] [versions]
 ```
 
 - `unit`: the binary format, Base64, checks and merge rules, loading and
@@ -211,6 +215,8 @@ lua5.1 Tests\run.lua <path to GuildProfessionsRecipes> <path to GuildProfessions
   full bags), and members still on 0.7 or 0.8.
 - `ui`: the roster column, the guild window tab and the recipe window on
   stand-ins for Blizzard's frames, the slash commands and the probe.
+- `versions`: members on the last release (taken from its git tag) and on
+  this version in one guild: recipes, skill-ups and crafting orders.
 
 ## Releasing
 
@@ -218,10 +224,11 @@ CurseForge packages every tagged commit pushed to this repository.
 
 1. Raise `## Version` in `GuildProfessionsRecipes.toc` and add that version's
    entry at the top of `CHANGELOG.md`. The tests check that both match.
-   While a version with a new protocol is tried in game, `ns.TRIAL` in
-   `Core.lua` keeps it on an addon-message prefix of its own, so members on
-   the released version are not asked to update yet. Set it to `false` for
-   the release; the tests print a note while it is on.
+   While a version with a new protocol is tried in game, `trial = true` in
+   the configuration `Core.lua` gives LibGuildSync keeps it on an
+   addon-message prefix of its own, so members on the released version are
+   not asked to update yet. Set it to `false` for the release; the tests
+   print a note while it is on.
 2. Commit, tag the commit `v<version>` and push the tag:
    `git push origin v<version>`. A tag containing `beta` or `alpha` makes a
    beta or alpha file instead of a release.

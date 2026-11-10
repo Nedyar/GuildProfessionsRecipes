@@ -14,6 +14,7 @@
 ## Author: Nedyar
 ## Version: 0.9.1
 ## SavedVariables: GuildProfessionsRecipesDB
+## Dependencies: LibGuildSync
 ## IconTexture: Interface\Icons\INV_Scroll_03
 
 Locales\Locales.lua
@@ -31,10 +32,7 @@ Locales\zhTW.lua
 Core.lua
 Pack.lua
 Data.lua
-Comm.lua
-Roster.lua
 Scanner.lua
-Sync.lua
 Orders.lua
 RosterColumn.lua
 GuildTab.lua

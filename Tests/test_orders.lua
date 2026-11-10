@@ -286,7 +286,7 @@ do
     record.o[1].c, record.o[1].u, record.o[1].e = now - 9 * DAY, now - 9 * DAY, 7
     record.o[2].e = 30
     local changed = carol.ns.Orders.Prune()
-    H.check(changed and record.av == 900, "the record is stamped with this version")
+    H.check(changed and record.av == carol.ns.VersionNumber(H.MAIN.fields.Version), "the record is stamped with this version")
     H.check(record.o[1].s == 1 and record.o[1].u == now - 2 * DAY and record.o[1].e == nil,
         "an order that had expired is cancelled as of then")
     H.check(record.o[2].s == 0 and record.o[2].e == nil, "one still on stays, without its days")

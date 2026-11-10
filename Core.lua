@@ -1,197 +1,103 @@
 -- Guild Professions & Recipes: shows the professions and recipes of every guild member.
--- Core.lua holds the shared helpers, the startup and the slash commands.
+--
+-- The addon messages, the guild roster, the saved database and the sync
+-- are LibGuildSync's (a separate addon this one depends on), attached
+-- below. Core.lua holds the startup, how our own changes are announced,
+-- and the slash commands.
 local ADDON_NAME, ns = ...
 local L = ns.L
+local Lib = LibGuildSync
 
-ns.VERSION = C_AddOns.GetAddOnMetadata(ADDON_NAME, "Version") or "0.0.0"
+ns.ADDON_NAME = ADDON_NAME
 
--- Addon messages go out on PREFIX and are heard on every prefix in LISTEN.
--- While a version with a new protocol is tried in game before its release
--- (TRIAL), it talks on a prefix of its own: members on the released
--- version do not hear it, so they are not asked to update to a version
--- they cannot get yet, and their own messages are still heard. TRIAL is
--- turned off for the release.
-ns.TRIAL = false
-local RELEASE_PREFIX = "GuildProfRecipes"
-ns.PREFIX = ns.TRIAL and "GuildProfRecTest" or RELEASE_PREFIX
-ns.LISTEN = { [ns.PREFIX] = true, [RELEASE_PREFIX] = true }
+-- While a version with a new protocol is tried in game before its release,
+-- set trial = true: it then talks on trialPrefix (see LibGuildSync's
+-- Core.lua). Turn it off for the release.
+Lib.Attach(ns, {
+    title = "Guild Professions & Recipes",
+    tag = "GR",
+    prefix = "GuildProfRecipes",
+    trialPrefix = "GuildProfRecTest",
+    trial = false,
+    -- 4: orders without expiry, deliveries counted (version 0.9). Still
+    -- read: 2, members known by GUID (0.2 to 0.7); 3, records with crafting
+    -- orders (0.8). The protocol is also the record format (Pack.FORMAT).
+    protocol = "4",
+    legacy = { ["2"] = true, ["3"] = true },
+    -- The test messages of /grecipes probe.
+    probe = "0",
+    savedVariable = "GuildProfessionsRecipesDB",
+})
 
--- "1.2.3" -> 10203. Records carry it so a newer client in the guild is noticed.
-function ns.VersionNumber(version)
-    local major, minor, patch = tostring(version):match("^(%d+)%.(%d+)%.?(%d*)")
-    if not major then
-        return 0
+-- Announcing our changes ---------------------------------------------------------
+--
+-- Besides its whole record (U), a member announces a change of skill levels
+-- alone with a short S message, and changes to crafting orders go out
+-- within seconds. Members on 0.2 to 0.8 still hear and send both U and S.
+local Sync = ns.Sync
+local T_LEVELS = string.byte("S")
+Sync.QUICK_KINDS.O = true
+Sync.LEGACY_TYPES[T_LEVELS] = true
+
+-- Our professions have been read, so what we announce is current.
+function Sync.OwnReady()
+    return ns.Scanner.ready
+end
+
+local function OnlyLevels(pending)
+    for kind in pairs(pending) do
+        if kind ~= "S" then
+            return false
+        end
     end
-    return tonumber(major) * 10000 + tonumber(minor) * 100 + (tonumber(patch) or 0)
+    return pending.S == true
 end
 
-function ns.VersionString(number)
-    return ("%d.%d.%d"):format(math.floor(number / 10000), math.floor(number / 100) % 100, number % 100)
-end
-
-ns.VERSION_NUM = ns.VersionNumber(ns.VERSION)
-
--- WoW Forever runs the Midnight addon API, where some results are "secret":
--- using one in a condition, or even comparing it with nil, raises an error.
--- Anything that might be secret goes through Plain() before it is looked at.
-local issecretvalue = issecretvalue or function() return false end
-
-function ns.Plain(value)
-    if issecretvalue(value) then
+-- Skill levels alone, on top of the version of our record last announced.
+function Sync.WriteOwnChange(record, state, pending)
+    if not OnlyLevels(pending) or state.sentGuild ~= ns.Roster.guildKey or not state.sentT or state.sentT >= record.t then
         return nil
     end
-    return value
-end
-
--- Tables from the API can be secret as a whole during a lockdown, and
--- reading their fields then raises.
-local canaccesstable = canaccesstable
-
-function ns.CanRead(tbl)
-    if type(tbl) ~= "table" then
-        return false
+    local writer = Sync.Begin(T_LEVELS)
+    writer:UInt(state.sentT)
+    writer:UInt(record.t)
+    local professions = ns.Data.SortedProfessions(record)
+    writer:UInt(#professions)
+    for _, prof in ipairs(professions) do
+        writer:UInt(prof.sl)
+        writer:UInt(prof.r)
+        writer:UInt(prof.m)
     end
-    -- Called directly: it answers for the function that calls it.
-    return not canaccesstable or canaccesstable(tbl) ~= false
+    return writer
 end
 
-function ns.Print(message, ...)
-    if select("#", ...) > 0 then
-        message = message:format(...)
+Sync.handlers[T_LEVELS] = function(reader, sender, guildKey)
+    local Data, Pack = ns.Data, ns.Pack
+    local previous, t = reader:UInt(), reader:UInt()
+    local count = reader:UInt()
+    if count > Pack.LIMITS.professions then
+        return
     end
-    print("|cff33ccffGuild Professions & Recipes|r: " .. message)
-end
-
--- RegisterEvent raises for an event this client does not have, which would
--- abort the rest of the file, so every registration is wrapped.
-function ns.RegisterEvents(frame, ...)
-    for i = 1, select("#", ...) do
-        pcall(frame.RegisterEvent, frame, (select(i, ...)))
+    local levels = {}
+    for i = 1, count do
+        levels[i] = { reader:UInt(), reader:UInt(), reader:UInt() }
     end
-end
-
--- Calls fn, returning nothing instead of raising when the client lacks it or
--- it fails. For the undocumented API the addon cannot be sure of.
-function ns.Try(fn, ...)
-    if type(fn) ~= "function" then
-        return nil
+    local guild = Data.GetGuild(guildKey)
+    local owner = ns.Roster.GUIDOfSender(sender)
+    local record = guild and owner and guild.members[owner]
+    -- Only applies on top of the version it follows; otherwise the next sync
+    -- brings the whole record.
+    if not record or record.t ~= previous or t <= previous or t > ns.Now() + 300 then
+        return
     end
-    local results = { pcall(fn, ...) }
-    if not results[1] then
-        ns.Debug("call failed: %s", tostring(results[2]))
-        return nil
+    for _, level in ipairs(levels) do
+        local prof = record.p[level[1]]
+        if prof and level[2] <= Pack.LIMITS.rank and level[3] <= Pack.LIMITS.rank then
+            prof.r, prof.m = level[2], level[3]
+        end
     end
-    return unpack(results, 2, table.maxn(results))
-end
-
-function ns.Now()
-    return GetServerTime()
-end
-
--- Debug log: kept in memory only, printed while /grecipes debug is on.
-ns.debugLog = {}
-
-function ns.Debug(message, ...)
-    if select("#", ...) > 0 then
-        local ok, text = pcall(string.format, message, ...)
-        message = ok and text or message
-    end
-    local line = date("%H:%M:%S ") .. message
-    local log = ns.debugLog
-    log[#log + 1] = line
-    if #log > 300 then
-        table.remove(log, 1)
-    end
-    if ns.debugEnabled then
-        print("|cff888888GR|r " .. line)
-    end
-end
-
--- Calls fn(...), reporting an error as a normal Lua error instead of
--- stopping the caller. (Arguments are not passed through xpcall itself,
--- which plain Lua 5.1 does not support.)
-function ns.SafeCall(fn, ...)
-    local args, count = { ... }, select("#", ...)
-    xpcall(function()
-        fn(unpack(args, 1, count))
-    end, geterrorhandler())
-end
-
--- Callbacks between the parts of the addon. Each listener runs on its own,
--- so an error in one is reported without stopping the others.
-local listeners = {}
-
-function ns.On(event, callback)
-    listeners[event] = listeners[event] or {}
-    table.insert(listeners[event], callback)
-end
-
-function ns.Fire(event, ...)
-    for _, callback in ipairs(listeners[event] or {}) do
-        ns.SafeCall(callback, ...)
-    end
-end
-
--- Runs fn once things have been quiet for delay seconds. With maxWait, it
--- runs at the latest maxWait seconds after the first call.
-local debounced = {}
-
-function ns.Debounce(key, delay, fn, maxWait)
-    local now = GetTime()
-    local entry = debounced[key]
-    if entry then
-        entry.timer:Cancel()
-    else
-        entry = { first = now }
-        debounced[key] = entry
-    end
-    local wait = delay
-    if maxWait then
-        wait = math.min(delay, entry.first + maxWait - now)
-    end
-    entry.timer = C_Timer.NewTimer(math.max(wait, 0), function()
-        debounced[key] = nil
-        fn()
-    end)
-end
-
--- Names -------------------------------------------------------------------
-
--- Our name ("Alice Smith") and how our addon messages are signed
--- ("Alice Smith-Realm").
-function ns.SetPlayerName(name)
-    ns.playerName = name
-    ns.playerKey = name .. "-" .. ns.realm
-end
-
--- True when a message sender is ourselves ("Name Surname", or with a realm).
-function ns.IsMe(sender)
-    return sender == ns.playerName or sender == ns.playerKey
-        or (ns.playerGUID ~= nil and ns.Roster.GUIDOfSender(sender) == ns.playerGUID)
-end
-
--- Realm names as they appear in "Name-Realm": no spaces or dashes.
-function ns.NormalizeRealm(realm)
-    return (realm:gsub("[%s%-]", ""))
-end
-
-function ns.ShortName(fullName)
-    return Ambiguate(fullName, "guild")
-end
-
--- "3 days", "5 min"... in the client's language.
-function ns.Ago(timestamp)
-    local seconds = math.max(ns.Now() - timestamp, 0)
-    if seconds < 60 then
-        return L["a moment"]
-    end
-    -- Limited to one unit, SecondsToTime only uses a unit from 1.5 of it, so
-    -- from 60 to 89 seconds it gives nothing.
-    local text = SecondsToTime(seconds, true, true, 1)
-    if text == "" then
-        text = SecondsToTime(seconds, true, true, 2)
-    end
-    return text
+    record.t, record.fh, record.seen = t, true, ns.Now()
+    Data.Changed(guild)
 end
 
 -- Professions ----------------------------------------------------------------
@@ -249,18 +155,12 @@ events:SetScript("OnEvent", function(self, event, name)
             ns.SetLocale(ns.db.settings.locale)
         end
     elseif event == "PLAYER_LOGIN" then
-        ns.realm = ns.Plain(GetNormalizedRealmName()) or ns.NormalizeRealm(GetRealmName())
-        ns.playerGUID = ns.Plain(UnitGUID("player"))
-        -- WoW Forever names have two parts, and UnitName gives them apart
-        -- ("Alice", "Smith"). The roster's spelling replaces this once it
-        -- is read (see Roster.lua).
-        local first, second = UnitName("player")
-        first, second = ns.Plain(first), ns.Plain(second)
-        ns.SetPlayerName(second and second ~= "" and (first .. " " .. second) or first)
-        ns.loginTime = GetTime()
+        -- The library first: our name, the roster, the messages and the sync.
+        Lib.Start(ns)
         -- Each part starts on its own, so a failure in one (reported as a normal
         -- Lua error) does not stop the others.
-        for _, init in ipairs({ ns.Comm.Init, ns.Roster.Init, ns.Scanner.Init, ns.Sync.Init, ns.Orders.Init, ns.OrderList.Init, ns.Deliveries.Init, ns.RosterColumn.Init, ns.GuildTab.Init, ns.Viewer.Init }) do
+        for _, init in ipairs({ ns.Scanner.Init, ns.Orders.Init, ns.OrderList.Init, ns.Deliveries.Init, ns.RosterColumn.Init,
+                ns.GuildTab.Init, ns.Viewer.Init }) do
             xpcall(init, geterrorhandler())
         end
     end

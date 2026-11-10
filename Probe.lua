@@ -45,6 +45,9 @@ function Probe.OnPing(text, channel, sender)
     end
 end
 
+-- The test messages (ns.PROBE) reach us through LibGuildSync's Comm.
+ns.Comm.probeHandler = Probe.OnPing
+
 -- Report building -------------------------------------------------------------
 
 local lines
@@ -121,7 +124,7 @@ local function GuildSection()
     local read, online = 0, 0
     for _, member in pairs(ns.Roster.members) do
         read = read + 1
-        if member.online then
+        if member.on then
             online = online + 1
         end
     end

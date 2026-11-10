@@ -220,8 +220,8 @@ w2:Login(alt)
 H.eq(alt.ns.loadInfo.native, false, "a first login has no saved data")
 w2:RunFor(30)
 w2:Logout(alt)
-alt.saved.settings.locale = "esES"
-alt.saved.guilds["Other Guild"] = { seen = now, members = {} }
+alt.saved.GuildProfessionsRecipesDB.settings.locale = "esES"
+alt.saved.GuildProfessionsRecipesDB.guilds["Other Guild"] = { seen = now, members = {} }
 w2:Login(alt)
 H.eq(alt.ns.loadInfo.native, true, "saved data loaded")
 H.check(alt.env.GuildProfessionsRecipesDB.guilds["Other Guild"] ~= nil, "saved guilds kept")
@@ -241,7 +241,7 @@ w4:OpenProfession(packer, 171, big, big)
 w4:RunFor(2)
 w4:CloseProfession(packer)
 w4:Logout(packer)
-local savedList = packer.saved.guilds[GUILD].members[packer.guid].p[171].k
+local savedList = packer.saved.GuildProfessionsRecipesDB.guilds[GUILD].members[packer.guid].p[171].k
 H.eq(type(savedList), "string", "recipe lists are saved packed")
 H.check(#savedList < #big * 3, "packed list is small (" .. #savedList .. " bytes for " .. #big .. " recipes)")
 w4:Login(packer)
@@ -309,10 +309,11 @@ H.check(tocVersion ~= nil, "the TOC has a version")
 H.eq(logVersion, tocVersion, "the changelog's newest entry matches the TOC version")
 -- The packager names the folder after package-as; the game needs it to match the TOC.
 H.eq(ReadFile(".pkgmeta"):match("package%-as: (%S+)"), "GuildProfessionsRecipes", "packaged under the TOC's folder name")
+H.check(ReadFile("GuildProfessionsRecipes.toc"):find("## Dependencies: LibGuildSync", 1, true) ~= nil, "LibGuildSync is a dependency")
 -- A trial build talks on its own prefix (Core.lua): fine to try in game,
 -- not to release.
-if ReadFile("Core.lua"):find("\nns.TRIAL = true", 1, true) then
-    print("  NOTE: ns.TRIAL is on in Core.lua: turn it off before tagging a release")
+if ReadFile("Core.lua"):find("\n    trial = true,", 1, true) then
+    print("  NOTE: trial is on in Core.lua: turn it off before tagging a release")
 end
 
 H.section("Locales")
