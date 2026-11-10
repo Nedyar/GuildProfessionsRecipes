@@ -24,7 +24,9 @@ professions and recipes of every member of your guild.
   the game has its crafting controls there is a **Request an order** button
   for the selected recipe (see Crafting orders).
 - **Guild window tab.** The guild window gets a **Recipes & Orders** tab
-  under Blizzard's own tabs, with four subtabs:
+  under Blizzard's own tabs. It takes turns with other addons' tabs there,
+  such as the Guild Bank of Guild Bank Alts: opening one closes the other,
+  and they line up one under the other. It has four subtabs:
   - **Professions:** every profession as a button. Those whose recipes some
     member has shared open the recipe window on all of them together, each
     recipe saying who knows it. The others are disabled, and their tooltip

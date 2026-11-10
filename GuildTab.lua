@@ -10,11 +10,22 @@
 -- changes the guild window's display mode, which would taint the window.
 -- Instead, it makes Blizzard's view invisible while its panel is open, and
 -- closes as soon as one of Blizzard's tabs is clicked.
+--
+-- Other addons' panels on the guild window (Guild Bank Alts adds one too).
+-- Every addon that adds a side tab with a panel like this one registers in
+-- the shared list GuildWindowAddonPanels: { { id, order, tab, Close }... }.
+-- Opening a panel closes the others (Close returns the Blizzard tab that was
+-- selected before them), and each tab goes under those of a lower order
+-- (this addon is 10, Guild Bank Alts 20). Neither addon needs the other:
+-- alone, each works the same.
 local _, ns = ...
 local L = ns.L
 
 local GuildTab = {}
 ns.GuildTab = GuildTab
+
+local ID, ORDER = "GuildProfessionsRecipes", 10
+local PANELS = "GuildWindowAddonPanels"
 
 local ICON = "Interface\\Icons\\INV_Scroll_03"
 local TAB_GAP = 20          -- between Blizzard's tabs
@@ -56,6 +67,29 @@ local selected = 1
 -- The order list's filters.
 local craftableOnly = true
 local hideMine = true
+
+-- The shared list -------------------------------------------------------------------
+
+local function Panels()
+    local panels = _G[PANELS]
+    if type(panels) ~= "table" then
+        panels = {}
+        _G[PANELS] = panels
+    end
+    return panels
+end
+
+-- Another addon's tab ours goes under (one of a lower order), if any.
+local function TabAbove()
+    local above, aboveOrder
+    for _, entry in ipairs(Panels()) do
+        if entry.id ~= ID and type(entry.order) == "number" and entry.order < ORDER and entry.tab
+                and (not aboveOrder or entry.order > aboveOrder) then
+            above, aboveOrder = entry.tab, entry.order
+        end
+    end
+    return above
+end
 
 -- Profession buttons ------------------------------------------------------------
 
@@ -351,11 +385,18 @@ local function ShowPage()
         return
     end
     remembered = nil
+    -- Another addon's panel gives way, with the Blizzard tab it remembered.
+    for _, entry in ipairs(Panels()) do
+        if entry.id ~= ID and type(entry.Close) == "function" then
+            local ok, before = pcall(entry.Close)
+            remembered = remembered or (ok and before or nil)
+        end
+    end
     for _, key in ipairs(BLIZZARD_TABS) do
         local other = communities[key]
         if other then
             if other:GetChecked() then
-                remembered = other
+                remembered = remembered or other
             end
             other:SetChecked(false)
         end
@@ -391,6 +432,17 @@ local function HidePage(restore)
         hiddenChatBar = nil
     end
     RestoreContent()
+end
+
+-- For the shared list: closes our panel for another addon's, and gives it
+-- the Blizzard tab that was selected before ours.
+local function Close()
+    if not page or not page:IsShown() then
+        return nil
+    end
+    local before = remembered
+    HidePage(false)
+    return before
 end
 
 local function CreatePage()
@@ -460,7 +512,7 @@ local function Update()
     tab:SetShown(show)
     if show then
         tab:ClearAllPoints()
-        tab:SetPoint("TOPLEFT", last, "BOTTOMLEFT", 0, -TAB_GAP)
+        tab:SetPoint("TOPLEFT", TabAbove() or last, "BOTTOMLEFT", 0, -TAB_GAP)
     else
         HidePage(true)
     end
@@ -483,6 +535,7 @@ local function Setup()
     -- After the template's own click (its sound, and marking itself).
     tab:HookScript("OnClick", ShowPage)
     tab:Hide()
+    table.insert(Panels(), { id = ID, order = ORDER, tab = tab, Close = Close })
     hooksecurefunc(communities, "UpdateCommunitiesTabs", Update)
     -- One of Blizzard's tabs was clicked (or the window changed its view).
     hooksecurefunc(communities, "SetDisplayMode", function()

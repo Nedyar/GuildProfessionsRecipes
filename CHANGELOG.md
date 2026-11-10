@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.1 - Sharing the guild window
+
+- **Works alongside Guild Bank Alts**, which adds a Guild Bank tab to the guild window: the two tabs line up one under the other, and opening one closes the other. Neither addon needs the other.
+
 ## 0.9.0 - Orders that move on by themselves
 
 - **Members on 0.8 must update.** Orders changed again. Members on 0.8 see a "newer version" notice, and their orders are not listed until they update.

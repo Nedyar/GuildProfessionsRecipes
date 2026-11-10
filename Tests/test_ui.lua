@@ -181,6 +181,46 @@ communities:UpdateCommunitiesTabs()
 H.check(not panel._shown and not guildTab._shown, "so does leaving the guild for another community")
 communities.GuildInfoTab:Show()
 communities:UpdateCommunitiesTabs()
+
+-- Another addon's panel on the guild window (Guild Bank Alts'), through the
+-- shared list GuildWindowAddonPanels.
+local panels = A.env.GuildWindowAddonPanels
+H.check(type(panels) == "table" and panels[1] and panels[1].id == "GuildProfessionsRecipes" and panels[1].tab == guildTab,
+    "our tab is in the shared list of the guild window's addon panels")
+local otherOpen, otherClosed = false, 0
+local otherTab = H.NewObject(A, "CheckButton")
+local other = { id = "Other", order = 20, tab = otherTab, Close = function()
+    if not otherOpen then
+        return nil
+    end
+    otherOpen, otherClosed = false, otherClosed + 1
+    return communities.RosterTab
+end }
+table.insert(panels, other)
+communities:UpdateCommunitiesTabs()
+H.eq(guildTab._point[2], communities.GuildInfoTab, "an addon of a higher order goes under us, not we under it")
+-- The other panel is open, Blizzard's tab already unmarked by it.
+otherOpen = true
+communities.RosterTab:SetChecked(false)
+guildTab._scripts.OnClick(guildTab)
+H.eq(otherClosed, 1, "opening ours closes the other addon's panel")
+H.check(panel._shown, "and ours shows")
+communities._scripts.OnHide(communities)
+H.check(communities.RosterTab._checked, "closing the window selects the Blizzard tab the other addon remembered")
+-- Ours is open: the other addon takes over.
+guildTab._scripts.OnClick(guildTab)
+local ours = panels[1]
+H.eq(ours.Close(), communities.RosterTab, "the other addon closing ours gets the Blizzard tab we remembered")
+H.check(not panel._shown and not guildTab._checked, "our panel is closed")
+H.check(list:GetAlpha() == 1, "and Blizzard's view shown again, for the other addon to hide")
+H.eq(ours.Close(), nil, "closing it again gives nothing")
+-- An addon of a lower order: we go under its tab.
+other.order = 5
+communities:UpdateCommunitiesTabs()
+H.eq(guildTab._point[2], otherTab, "under the tab of an addon of a lower order")
+table.remove(panels, 2)
+communities:UpdateCommunitiesTabs()
+communities.RosterTab:SetChecked(true)
 A.ns.Viewer.OpenMember(A.guid, 171)
 
 H.section("UI: recipe window")
