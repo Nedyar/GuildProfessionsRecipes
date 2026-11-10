@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.10.0 - On the guild addons' shared library
+
+- **Now needs LibGuildSync** 0.2.0 or later, the shared code of the guild addons: hidden addon messages, the guild roster, the saved data and the sync. The CurseForge app installs it with Guild Professions & Recipes; by hand, copy its folder too.
+- **Nobody has to update at once**: members on 0.9 and on 0.10 keep sharing everything, crafting orders included. The saved data does not change either.
+
 ## 0.9.1 - Sharing the guild window
 
 - **Works alongside Guild Bank Alts**, which adds a Guild Bank tab to the guild window: the two tabs line up one under the other, and opening one closes the other. Neither addon needs the other.

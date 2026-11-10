@@ -309,6 +309,8 @@ H.check(tocVersion ~= nil, "the TOC has a version")
 H.eq(logVersion, tocVersion, "the changelog's newest entry matches the TOC version")
 -- The packager names the folder after package-as; the game needs it to match the TOC.
 H.eq(ReadFile(".pkgmeta"):match("package%-as: (%S+)"), "GuildProfessionsRecipes", "packaged under the TOC's folder name")
+H.check(ReadFile(".pkgmeta"):find("required%-dependencies:\n    %- lib%-guild%-sync\n") ~= nil,
+    ".pkgmeta makes LibGuildSync a required relation on CurseForge")
 H.check(ReadFile("GuildProfessionsRecipes.toc"):find("## Dependencies: LibGuildSync", 1, true) ~= nil, "LibGuildSync is a dependency")
 -- A trial build talks on its own prefix (Core.lua): fine to try in game,
 -- not to release.
