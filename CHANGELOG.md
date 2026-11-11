@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.10.1 - Items that bind when made
+
+- **Recipes whose item binds when made are hidden.** Such an item binds to its crafter as it is made, so nobody can craft it for you. The Filter menu's new **Show items that bind when made** brings them back; like the other filters, it is cleared when another profession is shown.
+- **They cannot be ordered:** **Request an order**, and the **Order** buttons in the list of who knows a recipe, are off for them and say why.
+
 ## 0.10.0 - On the guild addons' shared library
 
 - **Now needs LibGuildSync** 0.2.0 or later, the shared code of the guild addons: hidden addon messages, the guild roster, the saved data and the sync. The CurseForge app installs it with Guild Professions & Recipes; by hand, copy its folder too.

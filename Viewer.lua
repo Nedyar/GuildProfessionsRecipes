@@ -74,7 +74,9 @@ local knownWindow  -- who knows the selected recipe (Viewer.ShowKnownBy)
 local state = { guild = false, key = nil, skillLine = nil, recipeID = nil, search = "", slots = {} }
 -- The Filter menu. Like the game's, it is cleared, with the search, each
 -- time another profession is shown (ShowCleanSearch).
-local filters = { makeable = false, hiddenSlots = {} }  -- hiddenSlots[slot name] = true
+-- hiddenSlots[slot name] = true; showBound: also the recipes whose item
+-- binds as it is made (hidden by default: nobody can craft them for you).
+local filters = { makeable = false, hiddenSlots = {}, showBound = false }
 local collapsed = {}   -- [group key] = true
 local recipeInfo = {}  -- [recipeID] = resolved name, icon, item...
 local requested = {}   -- [recipeID] = true once its spell data was asked for
@@ -308,9 +310,32 @@ local function SlotOf(info)
     return info.slot
 end
 
+-- The game's bind types (Enum.ItemBind): "binds when picked up", for an item
+-- made by a profession, binds it to its crafter as it is made.
+local BIND_ON_PICKUP = Enum.ItemBind and Enum.ItemBind.OnAcquire or 1
+
+-- Whether what the recipe makes binds to its crafter as it is made: then
+-- they could not give it to anyone. Until the game has loaded the item it
+-- is not known, and taken as not; the window redraws once it loads.
+local function BindsWhenMade(info)
+    if info.bound == nil and info.itemID then
+        local bindType = ns.Plain((select(14, C_Item.GetItemInfo(info.itemID))))
+        if type(bindType) == "number" then
+            info.bound = bindType == BIND_ON_PICKUP
+        elseif not requestedItems[info.itemID] then
+            requestedItems[info.itemID] = true
+            C_Item.RequestLoadItemDataByID(info.itemID)
+        end
+    end
+    return info.bound == true
+end
+
 -- useSlots: false for gathering professions, which have no Slots entry.
 local function PassesFilters(info, useSlots)
     if filters.makeable and not HaveMaterials(info) then
+        return false
+    end
+    if not filters.showBound and BindsWhenMade(info) then
         return false
     end
     local slot = useSlots and SlotOf(info)
@@ -337,12 +362,13 @@ local function SlotsOf(prof)
 end
 
 local function FiltersAreDefault()
-    return not filters.makeable and next(filters.hiddenSlots) == nil
+    return not filters.makeable and next(filters.hiddenSlots) == nil and not filters.showBound
 end
 
 local function ClearFilters()
     filters.makeable = false
     wipe(filters.hiddenSlots)
+    filters.showBound = false
 end
 
 -- As the game does when it shows another profession: no search, no filters.
@@ -795,7 +821,10 @@ end
 local function UpdateDetail()
     local detail = frame.Detail
     local recipeID = state.recipeID
-    frame.OrderButton:SetEnabled(recipeID ~= nil)
+    -- No order for an item that binds as it is made: it could not be given.
+    local bound = recipeID ~= nil and BindsWhenMade(ResolveRecipe(recipeID))
+    frame.OrderButton:SetEnabled(recipeID ~= nil and not bound)
+    frame.OrderButton.reason = bound and L["It binds when it is made: its crafter could not give it to you."] or nil
     if not recipeID then
         detail.Content:Hide()
         detail.Empty:Show()
@@ -902,8 +931,10 @@ local function InitKnownRow(row, entry)
     row.Whisper.reason = you and L["This is you."] or not entry.online and L["%s is offline."]:format(entry.name) or nil
     -- "0.9", as the version is spoken of.
     local version = ns.VersionString(ns.Orders.MIN_VERSION):gsub("%.0$", "")
-    row.Order:SetEnabled(not you and entry.canOrder)
+    local bound = knownWindow.bound
+    row.Order:SetEnabled(not you and entry.canOrder and not bound)
     row.Order.reason = you and L["This is you."]
+        or bound and L["It binds when it is made: its crafter could not give it to you."]
         or not entry.canOrder and L["%s needs version %s or later to receive orders."]:format(entry.name, version)
         or nil
 end
@@ -982,6 +1013,7 @@ function Viewer.ShowKnownBy()
     end
     knownWindow.recipeID, knownWindow.skillLine = recipeID, state.skillLine
     local info = ResolveRecipe(recipeID)
+    knownWindow.bound = BindsWhenMade(info)
     knownWindow:SetPortraitToAsset(ns.ProfessionIcon(state.skillLine))
     knownWindow.Item.Icon:SetTexture(info.icon or UNKNOWN_ICON)
     knownWindow.Recipe:SetText(OutputName(recipeID, info))
@@ -1167,6 +1199,15 @@ local function ToggleSlot(name)
     Refresh()
 end
 
+local function IsBoundShown()
+    return filters.showBound
+end
+
+local function ToggleBound()
+    filters.showBound = not filters.showBound
+    Refresh()
+end
+
 local function SetAllSlots(hidden)
     for _, slot in ipairs(state.slots) do
         filters.hiddenSlots[slot.name] = hidden or nil
@@ -1181,6 +1222,13 @@ local function SetupFilterMenu(_, root)
     local makeable = root:CreateCheckbox(makeableText, IsMakeableChecked, ToggleMakeable)
     if makeable and makeable.SetTitleAndTextTooltip then
         makeable:SetTitleAndTextTooltip(makeableText, L["Only recipes whose reagents you carry in your bags."])
+    end
+    -- Our own: the recipes whose item binds as it is made, hidden unless
+    -- ticked.
+    local boundText = L["Show items that bind when made"]
+    local bound = root:CreateCheckbox(boundText, IsBoundShown, ToggleBound)
+    if bound and bound.SetTitleAndTextTooltip then
+        bound:SetTitleAndTextTooltip(boundText, L["Recipes whose item binds to its crafter as it is made: nobody can craft it for you."])
     end
     -- Not for gathering professions, nor for one that makes no items.
     if #state.slots > 0 then
@@ -1470,6 +1518,16 @@ local function CreateWindow()
     local order = RedButton(page, L["Request an order"])
     order:SetPoint("BOTTOM", page, "BOTTOMRIGHT", -(PANEL_RIGHT_GAP + PANEL_WIDTH / 2), 7)
     order:SetEnabled(false)
+    -- Disabled, it says why.
+    order:SetMotionScriptsWhileDisabled(true)
+    order:SetScript("OnEnter", function(self)
+        if self.reason then
+            GameTooltip:SetOwner(self, "ANCHOR_TOP")
+            GameTooltip:SetText(self.reason, 1, 1, 1, 1, true)
+            GameTooltip:Show()
+        end
+    end)
+    order:SetScript("OnLeave", GameTooltip_Hide)
     order:SetScript("OnClick", function()
         if state.recipeID then
             local member = not state.guild and state.key ~= ns.playerGUID and state.key or nil
@@ -1551,6 +1609,10 @@ function Viewer.OpenGuild(skillLine, recipeID)
         collapsed[(GroupOf(recipeID, ResolveRecipe(recipeID)))] = nil
     end
     ShowCleanSearch()
+    -- An item that binds when made (an older order's) would be filtered out.
+    if wanted and BindsWhenMade(ResolveRecipe(recipeID)) then
+        filters.showBound = true
+    end
     frame:Show()
     Refresh()
     if wanted and frame.ScrollBox.ScrollToElementDataByPredicate then

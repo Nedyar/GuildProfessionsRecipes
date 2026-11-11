@@ -76,9 +76,14 @@ professions and recipes of every member of your guild.
   - Orders travel like the rest of the data, so they reach members who are
     offline when they log in. Members need version 0.9 or later to see
     them.
-- **Filters.** The window's Filter menu has two of the game's own entries:
+- **Filters.** The window's Filter menu has two of the game's own entries,
+  and one of its own:
   - **Have Materials** keeps the recipes whose reagents you carry in your
     bags, the same counts the reagents show.
+  - **Show items that bind when made** brings back the recipes whose item
+    binds when picked up, that is to its crafter as it is made. They are
+    hidden by default, since nobody could craft one for you; for the same
+    reason they cannot be ordered.
   - **Slots** filters by where the item is worn, with the game's
     **Created Items** entry for items that are not worn (leather, kits,
     potions...). Recipes that make no item, such as enchantments, always

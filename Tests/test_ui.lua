@@ -488,9 +488,10 @@ do
     w:Login(smith)
     w:RunFor(5)
     -- Bob's Blacksmithing: 101 makes a chest piece, 102 a robe, 104 boots,
-    -- 103 something not worn, 105 no item at all (like an enchantment).
-    -- 102 takes one item 2840, the others two of item 2447.
-    local all = { 101, 102, 103, 104, 105 }
+    -- 103 something not worn, 105 no item at all (like an enchantment), 106
+    -- an item that binds when it is made. 102 takes one item 2840, the
+    -- others two of item 2447.
+    local all = { 101, 102, 103, 104, 105, 106 }
     w.itemSlots = { [100101] = "INVTYPE_CHEST", [100102] = "INVTYPE_ROBE", [100104] = "INVTYPE_FEET" }
     w.reagents = { [102] = { { 2840, 1 } } }
     w.noItem = { [105] = true }
@@ -506,6 +507,17 @@ do
     w:RunFor(1)
     w:CloseProfession(me)
     w:RunFor(200)
+    -- The game's bind type of each item: 1 (binds when picked up, so when
+    -- made) for item 100106, 0 for the others.
+    local itemInfo = me.env.C_Item.GetItemInfo
+    rawset(me.env.C_Item, "GetItemInfo", function(item)
+        local name, link, quality = itemInfo(item)
+        if not name then
+            return nil
+        end
+        local itemID = tonumber(tostring(item):match("%d+"))
+        return name, link, quality, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, itemID == 100106 and 1 or 0
+    end)
 
     me.ns.Viewer.Open("Bob")
     local window = me.env.GuildProfessionsRecipesViewer
@@ -522,10 +534,11 @@ do
     local function Toggle(entry)
         entry.setSelected(entry.data)
     end
-    H.eq(Listed(), "101,102,103,104,105", "no filter: every recipe")
+    H.eq(Listed(), "101,102,103,104,105", "no filter: every recipe but the one whose item binds when made")
     H.check(not window.Filter._resetShown, "and no reset button")
     local menu = H.MenuOf(window.Filter)
-    H.check(#menu == 2 and menu[1].text == "Have Materials" and menu[2].text == "Slots", "the menu: Have Materials and Slots, no Has skill up")
+    H.check(#menu == 3 and menu[1].text == "Have Materials" and menu[2].text == "Show items that bind when made" and menu[3].text == "Slots",
+        "the menu: Have Materials, ours for items that bind when made, and Slots; no Has skill up")
 
     H.eq(menu[1].tooltip, "Only recipes whose reagents you carry in your bags.", "the materials entry says whose bags")
     me.bags = { [2840] = 1 }
@@ -538,7 +551,7 @@ do
     H.eq(Listed(), "101,102,103,104,105", "and it follows the bags")
     Toggle(menu[1])
 
-    local slots = menu[2].entries
+    local slots = menu[3].entries
     local texts = {}
     for i, entry in ipairs(slots) do
         texts[i] = entry.text
@@ -562,13 +575,38 @@ do
     H.eq(Listed(), "101,102,103,104,105", "the reset button clears every filter")
     H.check(not window.Filter._resetShown, "and hides itself")
 
+    -- Recipes whose item binds when made: hidden unless asked for.
+    H.eq(menu[2].tooltip, "Recipes whose item binds to its crafter as it is made: nobody can craft it for you.",
+        "the entry says why they are hidden")
+    H.check(not menu[2].isSelected(menu[2].data), "unticked by default")
+    Toggle(menu[2])
+    H.eq(Listed(), "101,102,103,104,105,106", "ticked, they show")
+    H.check(window.Filter._resetShown, "which counts as a filter")
+    local function SelectRecipe(recipeID)
+        for _, element in ipairs(window.ScrollBox._provider.elements) do
+            if element.recipeID == recipeID then
+                local row = H.NewObject(me, "Button")
+                window.ScrollBox._view.init(row, element)
+                row._scripts.OnClick(row)
+            end
+        end
+    end
+    SelectRecipe(106)
+    H.check(window.OrderButton._enabled == false
+        and window.OrderButton.reason == "It binds when it is made: its crafter could not give it to you.",
+        "no order for it, saying why")
+    SelectRecipe(101)
+    H.check(window.OrderButton._enabled ~= false and window.OrderButton.reason == nil, "other recipes can be ordered")
+    window.Filter._default()
+    H.eq(Listed(), "101,102,103,104,105", "the reset button hides them again")
+
     -- Like the game's, another profession starts with no filters and no search.
     Toggle(slots[3])
     Toggle(menu[1])
     me.ns.Viewer.OpenMember(me.guid, 171)
     H.eq(Listed(), "201,202", "opening another profession clears the filters")
     H.check(not window.Filter._resetShown and not menu[1].isSelected(menu[1].data), "the menu shows it")
-    local alchemySlots = H.MenuOf(window.Filter)[2]
+    local alchemySlots = H.MenuOf(window.Filter)[3]
     H.eq(alchemySlots and #alchemySlots.entries, 3, "its Slots: Check All, Uncheck All and Created Items")
     Toggle(alchemySlots.entries[3])
     window.Search._text = "201"
@@ -581,11 +619,23 @@ do
     w:RunFor(1)
     H.eq(Listed(), "301", "changing tab clears the filters")
     H.check(window.Search._text == "" and not window.Filter._resetShown, "and the search")
-    H.check(#H.MenuOf(window.Filter) == 1, "a gathering profession has no Slots entry, like the game's")
+    H.check(#H.MenuOf(window.Filter) == 2, "a gathering profession has no Slots entry, like the game's")
     window.Tabs[1]._scripts.OnMouseUp(window.Tabs[1], "LeftButton", true)
     H.eq(Listed(), "201,202", "and back, still clear")
     me.ns.Viewer.Open("Bob")
     H.check(not window.Filter._resetShown and Listed() == "101,102,103,104,105", "Bob's recipes again, unfiltered")
+    -- Opened on such a recipe (an order's), it is shown, its box ticked.
+    me.ns.Viewer.OpenGuild(164, 106)
+    H.check(Listed():find("106", 1, true) and window.Filter._resetShown, "opened on one, it shows")
+    me.ns.Viewer.ShowKnownBy()
+    local known = me.env.GuildProfessionsRecipesKnownBy
+    local row = H.NewObject(me, "Frame")
+    known.ScrollBox._view.init(row, known.ScrollBox._provider.elements[1])
+    H.check(row.Name._text == "Bob" and row.Order._enabled == false
+        and row.Order.reason == "It binds when it is made: its crafter could not give it to you.",
+        "and who knows it cannot be asked for it")
+    known._scripts.OnHide(known)
+    me.ns.Viewer.Open("Bob")
 
     -- The search also looks at the item made and the reagents, like the game's.
     local function Search(text)
