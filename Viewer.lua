@@ -748,9 +748,7 @@ local function ShowReagents(detail, recipeID, info)
                     return
                 end
                 local have = ns.Try(C_Item.GetItemCount, reagent.itemID) or 0
-                local name = C_Item.GetItemNameByID(reagent.itemID) or RETRIEVING_ITEM_INFO or "..."
-                local text = (TRADESKILL_REAGENT_COUNT or "%s/%d"):format(have, reagent.quantity) .. " " .. name
-                slot.Text:SetText(Paint(text, have >= reagent.quantity and WhiteColor() or MissingReagentColor()))
+                slot.Text:SetText(Viewer.ReagentText(reagent.itemID, have, reagent.quantity))
             end
             SetName()
             if not C_Item.GetItemNameByID(reagent.itemID) then
@@ -1324,15 +1322,12 @@ local function CreateRecipeList(page)
     return list
 end
 
-local function CreateReagentSlot(parent, index)
-    local slot = CreateFrame("Frame", nil, parent)
-    slot:SetSize(REAGENT_WIDTH, REAGENT_HEIGHT)
-    local column, row = math.floor((index - 1) / REAGENT_ROWS), (index - 1) % REAGENT_ROWS
-    slot:SetPoint("TOPLEFT", 1 + column * (REAGENT_WIDTH + REAGENT_GAP), -20 - row * (REAGENT_HEIGHT + REAGENT_GAP))
-
-    local button = CreateFrame("Button", nil, slot)
+-- A reagent's button, as the game's recipe window draws its slots: the
+-- item's tooltip, and shift-click links it. The item is holder.itemID
+-- (nil: an empty slot).
+function Viewer.CreateReagentButton(holder)
+    local button = CreateFrame("Button", nil, holder)
     button:SetSize(39, 39)
-    button:SetPoint("LEFT")
     button.Background = button:CreateTexture(nil, "BACKGROUND")
     button.Background:SetAtlas("Professions-Slot-bg")
     button.Background:SetAllPoints()
@@ -1352,17 +1347,38 @@ local function CreateReagentSlot(parent, index)
     button.Frame:SetPoint("TOPLEFT")
     button:SetHighlightTexture(SLOT_HIGHLIGHT, "ADD")
     button:SetScript("OnEnter", function(self)
-        if slot.itemID then
-            ShowItemTooltip(self, slot.itemID)
+        if holder.itemID then
+            ShowItemTooltip(self, holder.itemID)
         end
     end)
     button:SetScript("OnLeave", GameTooltip_Hide)
     button:SetScript("OnClick", function()
-        if slot.itemID and IsModifiedClick("CHATLINK") then
-            InsertLink(select(2, C_Item.GetItemInfo(slot.itemID)))
+        if holder.itemID and IsModifiedClick("CHATLINK") then
+            InsertLink(select(2, C_Item.GetItemInfo(holder.itemID)))
         end
     end)
-    slot.Button = button
+    return button
+end
+
+-- A reagent's text, as the game's recipe window writes it: how many we
+-- carry over how many it takes, then its name; white when that is enough,
+-- grey when not. enough: whether it is, when not have >= need.
+function Viewer.ReagentText(itemID, have, need, enough)
+    if enough == nil then
+        enough = have >= need
+    end
+    local name = C_Item.GetItemNameByID(itemID) or RETRIEVING_ITEM_INFO or "..."
+    local text = (TRADESKILL_REAGENT_COUNT or "%s/%d"):format(have, need) .. " " .. name
+    return Paint(text, enough and WhiteColor() or MissingReagentColor())
+end
+
+local function CreateReagentSlot(parent, index)
+    local slot = CreateFrame("Frame", nil, parent)
+    slot:SetSize(REAGENT_WIDTH, REAGENT_HEIGHT)
+    local column, row = math.floor((index - 1) / REAGENT_ROWS), (index - 1) % REAGENT_ROWS
+    slot:SetPoint("TOPLEFT", 1 + column * (REAGENT_WIDTH + REAGENT_GAP), -20 - row * (REAGENT_HEIGHT + REAGENT_GAP))
+    slot.Button = Viewer.CreateReagentButton(slot)
+    slot.Button:SetPoint("LEFT")
 
     slot.Text = slot:CreateFontString(nil, "BORDER", "GameFontHighlight_NoShadow")
     slot.Text:SetSize(108, 36)
@@ -1616,10 +1632,11 @@ function Viewer.OpenGuild(skillLine, recipeID)
     frame:Show()
     Refresh()
     if wanted and frame.ScrollBox.ScrollToElementDataByPredicate then
+        -- (predicate, alignment, offset, noInterpolation): no offset.
         local constants = ScrollBoxConstants or {}
         frame.ScrollBox:ScrollToElementDataByPredicate(function(data)
             return data.recipeID == recipeID
-        end, constants.AlignCenter, constants.NoScrollInterpolation)
+        end, constants.AlignCenter, 0, constants.NoScrollInterpolation)
     end
 end
 

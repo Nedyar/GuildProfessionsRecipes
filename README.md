@@ -33,12 +33,31 @@ professions and recipes of every member of your guild.
     says why.
   - **Pending orders:** orders for you, personal ones to accept or decline,
     and those you accepted, to mark their materials received, to complete
-    or to release.
+    or to release. Its **Materials list** button opens a window with every
+    material the orders you accepted take for the crafts they have left,
+    summed over them, as the recipe window shows reagents: how many you
+    carry in your bags over how many they take. What you made already
+    takes nothing more: the items delivered, and those of the order your
+    bags hold (for the oldest orders first, and not counted again as a
+    material of another order). An enchantment, which makes no item, takes
+    its materials until you complete it. What requesters who provide
+    the materials have yet to send you is shown under each one and counts as
+    yours: a material is in white once you have it or it is on its way.
+    Its **Prepare** button keeps those materials in your bags, as Guild Bank
+    Alts gets a request ready: with your bank open it brings what is
+    missing from it; without it, it keeps what your bags hold. Either way it
+    splits and joins stacks so each material takes the fewest, and shows a
+    padlock on each kept stack in your bags. A kept stack stays kept while
+    you move it within your bags; splitting it, adding to it, using it up or
+    taking it out of your bags lets it go, and so does an order completed
+    or released. Before moving anything it checks your bags have room for it
+    all. Once nothing more can be kept, the button is **Release all**.
   - **Order list:** the open orders, to accept. By default it shows only
     those whose recipe you know, and hides those of your own characters.
   - **Requested orders:** yours, to modify while nobody has taken them, to
     cancel or finish until they are over, and to delete once finished or
-    cancelled.
+    cancelled: one by one, or all at once with **Delete finished and
+    cancelled**, whose tooltip lists them.
 - **Crafting orders.** Ask a guildmate to craft a recipe for you:
   - **Open**, so anyone who knows the recipe may accept it, or **Personal**,
     for one member you pick from those who know it.
@@ -47,9 +66,10 @@ professions and recipes of every member of your guild.
     until you cancel or finish them.
   - If you provide the materials, the accepted order waits for them until
     the crafter has them. The crafter marks it completed, then you mark it
-    finished. A crafter who cannot make it after all releases it, and it is
-    open again. You may cancel it any time before it is over, and finish it
-    as soon as you have it.
+    finished. A crafter who cannot make it after all releases it: it then
+    waits for you, saying who released it, until you modify it (it is a new
+    order then, open to be taken again) or cancel it. You may cancel it any
+    time before it is over, and finish it as soon as you have it.
   - **Deliveries are counted.** What changes hands between the requester
     and the crafter, by trade or by mail and in as many goes as needed,
     moves the order on by itself: the materials, once all are given, are
@@ -71,8 +91,12 @@ professions and recipes of every member of your guild.
   - You are told in the chat when an order is directed to you, when one of
     yours is accepted, declined, released or completed or its materials are
     received, and when an order you accepted is cancelled, also of changes
-    made while you were offline. Blizzard's notification mark shows on the
-    tab while an order waits for you.
+    made while you were offline. While an order waits for you, Blizzard's
+    notification mark shows on the micro menu's Guild & Communities button,
+    on the tab, on the subtab that lists it and on the order's icon, until
+    you do what it waits for. One of yours that is accepted, or whose
+    materials are received, has the mark too, until you point at it in
+    Requested orders.
   - Orders travel like the rest of the data, so they reach members who are
     offline when they log in. Members need version 0.9 or later to see
     them.
@@ -154,9 +178,9 @@ every client turns them into names in its own language.
   all clients end up with the same data. Members who leave the guild are
   dropped after 30 days.
 - **Crafting orders.** An order is kept in its requester's data, and each
-  crafter's answer (accepted, declined, materials received, completed, how
-  many items they delivered and how much of the tip they received) in that
-  crafter's, so the same rule holds.
+  crafter's answer (accepted, declined, released, materials received,
+  completed, how many items they delivered and how much of the tip they
+  received) in that crafter's, so the same rule holds.
   Every client works out an order's state from both: when two crafters
   accept an open order at once, the earlier acceptance wins everywhere.
   Finished and cancelled orders are dropped three days later, or at once
@@ -167,7 +191,9 @@ every client turns them into names in its own language.
   changed them again for orders without expiry and the deliveries. 0.9
   still reads what members on 0.7 and 0.8 announce, but they cannot read
   0.9, so they are asked to update. Until they do, their orders are not
-  listed.
+  listed. A released order is written as a refusal, which members on 0.10
+  understand: they see a released open order as pending again, and a
+  released personal one as declined.
 
 ## Files
 
@@ -188,6 +214,9 @@ every client turns them into names in its own language.
 | `OrderForm.lua` | The window to request or change an order |
 | `OrderList.lua` | The order lists of the guild window tab, and the notices |
 | `Deliveries.lua` | Trades and mail with guildmates, counted towards their orders |
+| `MaterialsList.lua` | The materials the orders you accepted take |
+| `Prepare.lua` | Keeping those materials in your bags, from your bank too |
+| `BagLocks.lua` | The padlocks on the kept stacks in the game's bag windows |
 | `Probe.lua` | `/grecipes probe` |
 | `Tests\` | Offline tests (not loaded by the game) |
 | `.github\logo.png` | The project logo (not part of the addon) |
@@ -217,11 +246,14 @@ lua5.1 Tests\run.lua <path to GuildProfessionsRecipes> <path to GuildProfessions
   orders between several clients (online, offline, at the same time), the
   clean-up, the request form, the order lists and the notices, deliveries
   and tips by trade and mail (in several goes, cancelled, refused, with
-  full bags), and members still on 0.7 or 0.8.
+  full bags), the materials list and preparing its materials (from the bags
+  alone or the bank, padlocks, no room, a slow server, the bank closed
+  mid-way), and members still on 0.7 or 0.8.
 - `ui`: the roster column, the guild window tab and the recipe window on
   stand-ins for Blizzard's frames, the slash commands and the probe.
-- `versions`: members on the last release (taken from its git tag) and on
-  this version in one guild: recipes, skill-ups and crafting orders.
+- `versions`: members on the last release (taken from its git tag, on this
+  LibGuildSync) and on this version in one guild: recipes, skill-ups and
+  crafting orders, also given back.
 
 ## Releasing
 
@@ -232,8 +264,11 @@ CurseForge packages every tagged commit pushed to this repository.
    While a version with a new protocol is tried in game, `trial = true` in
    the configuration `Core.lua` gives LibGuildSync keeps it on an
    addon-message prefix of its own, so members on the released version are
-   not asked to update yet. Set it to `false` for the release; the tests
-   print a note while it is on.
+   not asked to update yet. Set it to `false` for the release. A version
+   that keeps the protocol is tried in game with `ANNOUNCE_AS` in
+   `Core.lua` set to the last release, which it then tells the guild it
+   runs; set it to nil for the release. The tests print a note while
+   either is on.
 2. Commit, tag the commit `v<version>` and push the tag:
    `git push origin v<version>`. A tag containing `beta` or `alpha` makes a
    beta or alpha file instead of a release.

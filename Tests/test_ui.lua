@@ -258,6 +258,14 @@ recipeRow._scripts.OnEnter(recipeRow)
 H.check((viewer.Detail.Name._text or ""):find("Item" .. (recipeRow.data.recipeID + 100000), 1, true) ~= nil, "selecting a recipe shows the item it makes")
 H.check((viewer.Detail.Description._text or ""):find(tostring(recipeRow.data.recipeID), 1, true) ~= nil, "and its description")
 H.check((viewer.Detail.reagents[1].Text._text or ""):find("0/2 Item2447", 1, true) ~= nil, "reagents show what we carry over what it takes")
+H.eq((viewer.Detail.reagents[1].Text._text or ""):sub(1, 10), "|cff7f7f7f", "in grey while it is not enough")
+A.bags = { [2447] = 2 }
+world:FireEvent(A, "BAG_UPDATE_DELAYED")
+world:RunFor(1)
+H.eq(viewer.Detail.reagents[1].Text._text, "|cffffffff2/2 Item2447|r", "and in white once it is")
+A.bags = nil
+world:FireEvent(A, "BAG_UPDATE_DELAYED")
+world:RunFor(1)
 H.check((viewer.Detail.KnownBy.Text._text or ""):find("Nobody", 1, true) ~= nil and viewer.Detail.WhoButton._shown == false,
     "nobody else knows it, and there is nobody to see")
 A.shiftDown = true

@@ -139,6 +139,22 @@ do
     order.d = "B"
     H.eq(Orders.State(order, "R", { Answer("A", 1, now - 20) }), "pending", "a directed order: only its member's answer counts")
     H.eq(Orders.State(order, "R", { Answer("B", 2, now - 20) }), "denied", "denied")
+    -- A release: a refusal stamped with the order's own time.
+    local releaser
+    state, crafter, _, _, releaser = Orders.State(order, "R", { Answer("B", 2, order.u) })
+    H.check(state == "released" and releaser == "B" and crafter == nil, "released by its member, who is no longer its crafter")
+    H.eq(Orders.State(order, "R", { Answer("A", 2, order.u) }), "pending", "a directed order: only its member's release counts")
+    order.d = nil
+    state, _, _, _, releaser = Orders.State(order, "R", { Answer("B", 2, order.u), Answer("A", 2, order.u) })
+    local _, _, _, _, again = Orders.State(order, "R", { Answer("A", 2, order.u), Answer("B", 2, order.u) })
+    H.check(state == "released" and releaser == "A" and again == "A",
+        "an open order: released by anyone, the same one named on every client")
+    H.eq(Orders.State(order, "R", { Answer("B", 2, now - 20) }), "pending", "an open order is never declined")
+    H.eq(Orders.State(order, "R", { Answer("B", 2, order.u), Answer("A", 1, now - 10) }), "accepted",
+        "released by one, accepted by another (on an older version): accepted")
+    H.eq(Orders.State(order, "R", { Answer("B", 2, order.u - 1, order.u - 1) }), "pending", "the release of an older version does not count")
+    H.eq(Orders.State(order, "R", { Answer("R", 2, order.u) }), "pending", "nor the requester's own")
+    order.d = "B"
     order.s = 1
     H.eq(Orders.State(order, "R", { Answer("B", 1, now - 20) }), "cancelled", "cancelled")
     order.s = 2
@@ -229,10 +245,26 @@ do
     H.eq(select(2, StateOf(carol, carol, 1)), alice.guid, "Carol sees Alice as its crafter")
     H.check(alice.ns.Orders.Release(carol.guid, 1), "Alice gives it back")
     w:RunFor(10)
-    H.eq(StateOf(carol, carol, 1), "pending", "pending again")
+    H.eq(StateOf(carol, carol, 1), "released", "released: it waits for Carol")
+    H.eq(ViewOf(carol, carol, 1).releaser, alice.guid, "who sees Alice released it")
+    H.eq(StateOf(bob, carol, 1), "released", "and so does the guild")
+    H.check(#alice.ns.Orders.ForMe(Guild(alice)) == 0 and alice.ns.Orders.Accept(carol.guid, 1) == nil
+        and alice.ns.Orders.Deny(carol.guid, 1) == nil, "no longer Alice's, who cannot take it again as it is")
+    H.check(carol.ns.Orders.Modify(1, { sl = 197, r = 21, d = alice.guid, q = 2 }), "Carol may modify it")
+    w:RunFor(10)
+    H.check(StateOf(alice, carol, 1) == "pending" and #alice.ns.Orders.ForMe(Guild(alice)) == 1, "a new request for Alice")
     H.check(carol.ns.Orders.Cancel(1), "Carol cancels it")
     w:RunFor(10)
     H.eq(StateOf(alice, carol, 1), "cancelled", "cancelled everywhere")
+
+    -- A decline in the very second the order was last changed is still a
+    -- decline, never taken for a release.
+    H.eq(carol.ns.Orders.Create({ sl = 197, r = 21, d = bob.guid }), 2, "another order for Bob")
+    w:RunFor(10)
+    H.eq(StateOf(bob, carol, 2), "pending", "Bob has it")
+    ViewOf(bob, carol, 2).order.u = bob.ns.Now()
+    H.check(bob.ns.Orders.Deny(carol.guid, 2), "Bob turns it down at once")
+    H.eq(StateOf(bob, carol, 2), "denied", "a decline in the order's own second")
     H.eq(#w.errors, 0, "directed order: no Lua errors")
 end
 
@@ -682,6 +714,43 @@ do
     rows = Rows(alice, alicePanel)
     H.check(Count(rows) == 1 and Buttons(rows[3]) == "Accept", "unticked, that character can take it")
     alice.ns.db.own[carol.guid] = nil
+
+    -- Delete finished and cancelled, under Requested orders.
+    local deleteButton = carolPanel.DeleteClosed
+    H.eq(deleteButton._shown, false, "the order list has no Delete finished and cancelled button")
+    Select(carolPanel, 4)
+    H.check(deleteButton._shown ~= false and deleteButton._enabled ~= false and deleteButton._text == "Delete finished and cancelled",
+        "Requested orders has it, on with a finished order")
+    H.check(carol.ns.Orders.Cancel(3), "(her open order cancelled)")
+    local open = carol.ns.Orders.Create({ sl = 197, r = 21 })
+    w:RunFor(10)
+    Select(carolPanel, 4)
+    deleteButton._scripts.OnEnter(deleteButton)
+    local tip = table.concat(carol.env.GameTooltip._lines, "\n")
+    H.check(tip:find("Deletes your finished and cancelled orders (2).", 1, true) and tip:find("| Finished", 1, true)
+        and tip:find("| Cancelled", 1, true), "its tooltip says how many, and lists them: " .. tip)
+    deleteButton._scripts.OnClick(deleteButton)
+    w:RunFor(10)
+    rows = Rows(carol, carolPanel)
+    H.check(Count(rows) == 1 and rows[open] and deleteButton._enabled == false,
+        "both deleted at once, not her open order; then the button is off")
+    H.check(carol.printed[#carol.printed]:find("finished and cancelled orders deleted: 2.", 1, true), "it says how many")
+    H.check(ViewOf(alice, carol, 1) == nil and ViewOf(alice, carol, 3) == nil, "gone for everyone")
+    deleteButton._scripts.OnEnter(deleteButton)
+    H.check(table.concat(carol.env.GameTooltip._lines, "\n"):find("You have no finished or cancelled orders.", 1, true),
+        "off, its tooltip says why")
+    -- More than the tooltip names: the rest are counted.
+    for _ = 1, 12 do
+        carol.ns.Orders.Cancel(carol.ns.Orders.Create({ sl = 197, r = 21 }))
+    end
+    w:RunFor(10)
+    Select(carolPanel, 4)
+    deleteButton._scripts.OnEnter(deleteButton)
+    tip = table.concat(carol.env.GameTooltip._lines, "\n")
+    H.check(tip:find("(12)", 1, true) and tip:find("and 2 more |4order:orders;", 1, true), "ten named, the other two counted")
+    deleteButton._scripts.OnClick(deleteButton)
+    w:RunFor(10)
+    H.eq(Count(Rows(carol, carolPanel)), 1, "all twelve deleted")
     H.eq(#w.errors, 0, "lists: no Lua errors")
     for i = 1, math.min(#w.errors, 5) do
         print(w.errors[i])
@@ -704,30 +773,155 @@ do
     local function Badge(client)
         return client.env.GuildProfessionsRecipesGuildTab.Badge._shown
     end
+    -- The mark on a client's micro menu button that opens the guild window:
+    -- of the game's template for it, on that button. The last one made: the
+    -- frames of earlier sessions stay in client.created.
+    local function MicroMark(client)
+        for i = #client.created, 1, -1 do
+            local frame = client.created[i]
+            if frame._template == "MainMenuBarMicroButtonNotificationTemplate" and frame._parent == client.env.GuildMicroButton then
+                return frame
+            end
+        end
+    end
+    -- A client's subtabs, its panel open.
+    local function SubTabs(client)
+        local tab = client.env.GuildProfessionsRecipesGuildTab
+        tab._scripts.OnClick(tab)
+        return client.env.GuildProfessionsRecipesGuildPanel.SubTabs.Tabs
+    end
+    -- A row of the order list a client's panel shows, on its order id.
+    local function RowOf(client, id)
+        local orders = client.env.GuildProfessionsRecipesGuildPanel.Orders
+        for _, element in ipairs(orders.ScrollBox._provider.elements) do
+            if element.view.id == id then
+                local row = H.NewObject(client, "Frame")
+                orders.ScrollBox._view.init(row, element)
+                return row, element
+            end
+        end
+    end
     H.check(not Badge(bob) and not Badge(carol), "no marks while nothing waits")
+    H.check(MicroMark(bob) and not MicroMark(bob):IsShown(), "nor on the micro menu's guild button")
+    H.check(bob.env.GuildProfessionsRecipesGuildTab.Badge._parent == bob.env.GuildProfessionsRecipesGuildTab
+        and bob.env.GuildProfessionsRecipesGuildTab.Badge.Icon ~= nil, "over the tab, so its selection glow does not cover it")
 
     carol.ns.Orders.Create({ sl = 197, r = 21, d = bob.guid, q = 2 })
     w:RunFor(10)
     H.check(Told(bob, "Carol asks you for a personal order:") and Told(bob, "x2"), "Bob is told of the personal order")
     H.check(Badge(bob), "and his tab shows Blizzard's mark")
+    H.check(MicroMark(bob):IsShown() and not MicroMark(carol):IsShown(), "so does his micro menu's guild button, not Carol's")
+    local subtabs = SubTabs(bob)
+    H.check(subtabs[2].Mark:IsShown() and not subtabs[3].Mark:IsShown() and not subtabs[4].Mark:IsShown(),
+        "and his Pending orders subtab")
+    H.check(subtabs[2].Mark._point[2] == subtabs[2].Middle and subtabs[2].Mark._point[3] == "TOPRIGHT", "on its art's corner")
+    subtabs[2]._scripts.OnClick(subtabs[2])
+    H.eq(subtabs[2].Mark._point[2], subtabs[2].MiddleActive, "the taller art's once selected")
+    local orders = bob.env.GuildProfessionsRecipesGuildPanel.Orders
+    local row = H.NewObject(bob, "Frame")
+    orders.ScrollBox._view.init(row, orders.ScrollBox._provider.elements[1])
+    H.check(row.Mark:IsShown() and row.Mark._parent == row.Item, "and the order's row, on its icon")
     bob.ns.Orders.Accept(carol.guid, 1)
     w:RunFor(10)
     H.check(Told(carol, "Bob accepted your order:"), "Carol is told it was accepted")
+    -- Its acceptance is a notice for Carol until she points at its row.
+    H.check(Badge(carol) and MicroMark(carol):IsShown(), "on her tab and her micro menu's button")
+    subtabs = SubTabs(carol)
+    subtabs[4]._scripts.OnClick(subtabs[4])
+    H.check(subtabs[4].Mark:IsShown() and subtabs[4]:GetText() == "Requested orders (1)", "on her Requested orders subtab")
+    local element
+    row, element = RowOf(carol, 1)
+    H.check(row.Mark:IsShown(), "and on its row")
+    row._scripts.OnEnter(row)
+    H.check(not row.Mark:IsShown() and not subtabs[4].Mark:IsShown() and not Badge(carol) and not MicroMark(carol):IsShown(),
+        "pointing at the row, she has seen it: every mark goes")
+    H.eq(subtabs[4]:GetText(), "Requested orders", "and the subtab no longer counts it")
+    carol.ns.OrderList.CheckNotices()
+    carol.ns.GuildTab.UpdateMarks()
+    carol.env.GuildProfessionsRecipesGuildPanel.Orders.ScrollBox._view.init(row, element)
+    H.check(not row.Mark:IsShown() and not Badge(carol), "for good")
     H.check(Badge(bob), "an accepted order still waits for Bob")
     bob.ns.Orders.Complete(carol.guid, 1)
     w:RunFor(10)
     H.check(Told(carol, "Bob completed your order:") and Badge(carol) and not Badge(bob), "then completed: now it waits for Carol")
+    H.check(MicroMark(carol):IsShown() and not MicroMark(bob):IsShown(), "on her micro menu's button, no longer on Bob's")
+    subtabs = SubTabs(carol)
+    H.check(subtabs[4].Mark:IsShown() and not subtabs[2].Mark:IsShown(), "and on her Requested orders subtab")
+    subtabs[4]._scripts.OnClick(subtabs[4])
+    orders = carol.env.GuildProfessionsRecipesGuildPanel.Orders
+    row = H.NewObject(carol, "Frame")
+    orders.ScrollBox._view.init(row, orders.ScrollBox._provider.elements[1])
+    H.check(row.Mark:IsShown(), "and her order's row")
     carol.ns.Orders.Finish(1)
     w:RunFor(10)
-    H.check(not Badge(carol), "finished: no more mark")
+    H.check(not Badge(carol) and not MicroMark(carol):IsShown() and not subtabs[4].Mark:IsShown(), "finished: no more mark")
+    orders.ScrollBox._view.init(row, orders.ScrollBox._provider.elements[1])
+    H.check(not row.Mark:IsShown(), "nor on its row")
 
     carol.ns.Orders.Create({ sl = 197, r = 21 })
     w:RunFor(10)
     alice.ns.Orders.Accept(carol.guid, 2)
     w:RunFor(10)
+    H.check(Badge(carol), "another acceptance, another notice")
+    row = RowOf(carol, 2)
+    row._scripts.OnEnter(row)
+    H.check(not Badge(carol), "seen")
     alice.ns.Orders.Release(carol.guid, 2)
     w:RunFor(10)
-    H.check(Told(carol, "your order is open again:"), "a released order is told")
+    H.check(Told(carol, "Alice released your order: Item100021. Modify or cancel it."), "a released order is told")
+    -- Released, it waits for Carol: its mark stays until she modifies or
+    -- cancels it, and its text says who released it.
+    row = RowOf(carol, 2)
+    H.check(Badge(carol) and MicroMark(carol):IsShown() and row.Mark:IsShown(), "and marked")
+    H.check(subtabs[4].Mark:IsShown() and subtabs[4]:GetText() == "Requested orders (1)", "on her Requested orders subtab too")
+    H.eq(row.State:GetText(), "Released by Alice", "its text says who released it")
+    H.check(row.buttons[1]:IsShown() and row.buttons[1].action == "cancel" and row.buttons[2]:IsShown()
+        and row.buttons[2].action == "modify", "with its Modify and Cancel buttons")
+    row._scripts.OnEnter(row)
+    row.Item._scripts.OnEnter(row.Item)
+    carol.ns.OrderList.CheckNotices()
+    carol.ns.GuildTab.UpdateMarks()
+    H.check(Badge(carol) and RowOf(carol, 2).Mark:IsShown(), "pointing at it does not take its mark away")
+    H.eq(#bob.ns.Orders.Open(Guild(bob), true), 0, "nobody may take it as it is")
+    -- Modified, it is a new order: open again, with its own text, and no
+    -- mark.
+    carol.ns.Orders.Modify(2, { sl = 197, r = 21, q = 2 })
+    w:RunFor(10)
+    row = RowOf(carol, 2)
+    H.check(row.State:GetText() == "Open order" and not row.Mark:IsShown() and not Badge(carol),
+        "modified, it is an open order again, and its mark goes")
+    H.eq(#bob.ns.Orders.Open(Guild(bob), true), 1, "which Bob may take")
+    bob.ns.Orders.Accept(carol.guid, 2)
+    w:RunFor(10)
+    H.check(Badge(carol) and RowOf(carol, 2).Mark:IsShown(), "accepted again, by another crafter: a new notice")
+    H.eq(RowOf(carol, 2).State:GetText(), "Accepted by Bob", "its text, Bob's acceptance")
+    row = RowOf(carol, 2)
+    row._scripts.OnEnter(row)
+    H.check(not Badge(carol), "seen too")
+    -- Noted with its crafter: another's acceptance is new even if no
+    -- notice check saw the release in between.
+    local seen = carol.ns.Data.OwnState().acceptedSeen
+    H.eq(seen[row.view.key], bob.guid, "noted as Bob's acceptance")
+    seen[row.view.key] = alice.guid
+    H.check(carol.ns.OrderList.WaitsForUs(row.view), "Alice's acceptance seen is not Bob's")
+    seen[row.view.key] = bob.guid
+    bob.ns.Orders.Release(carol.guid, 2)
+    w:RunFor(10)
+    H.check(Badge(carol) and RowOf(carol, 2).State:GetText() == "Released by Bob", "released again, by Bob now")
+    carol.ns.Orders.Modify(2, { sl = 197, r = 21, q = 3 })
+    w:RunFor(10)
+    bob.ns.Orders.Accept(carol.guid, 2)
+    w:RunFor(10)
+    H.check(Badge(carol), "modified and accepted again by the same crafter: a new notice as well")
+    row = RowOf(carol, 2)
+    row._scripts.OnEnter(row)
+    -- Released once more, and cancelled: its mark goes too.
+    bob.ns.Orders.Release(carol.guid, 2)
+    w:RunFor(10)
+    H.check(Badge(carol), "released once more")
+    carol.ns.Orders.Cancel(2)
+    w:RunFor(10)
+    H.check(not Badge(carol) and not RowOf(carol, 2).Mark:IsShown(), "cancelled, its mark goes")
 
     -- An order with Carol's materials: she is asked for them.
     carol.ns.Orders.Create({ sl = 197, r = 21, m = true })
@@ -739,6 +933,10 @@ do
     alice.ns.Orders.Receive(carol.guid, 3)
     w:RunFor(10)
     H.check(Told(carol, "Alice received your materials:"), "and told once Alice has them")
+    H.check(Badge(carol) and RowOf(carol, 3).Mark:IsShown(), "its notice, until she points at it")
+    row = RowOf(carol, 3)
+    row.Item._scripts.OnEnter(row.Item)
+    H.check(not row.Mark:IsShown() and not Badge(carol), "pointing at its icon is seeing it too")
     -- Cancelled once taken: its crafter is told.
     local before = #alice.printed
     carol.ns.Orders.Cancel(3)
@@ -757,13 +955,48 @@ do
     -- Told at login what changed while away.
     w:Logout(alice)
     w:RunFor(15)
-    carol.ns.Orders.Create({ sl = 197, r = 22, d = alice.guid })
+    local away = carol.ns.Orders.Create({ sl = 197, r = 22, d = alice.guid })
     w:RunFor(10)
     w:Login(alice)
     w:RunUntil(function()
         return Told(alice, "Carol asks you for a personal order:")
     end, 120)
     H.check(Told(alice, "Carol asks you for a personal order:"), "a personal order placed while away is told at login")
+
+    -- Released while Carol is away by another character of her account,
+    -- whose saved data is hers too: at login nothing new arrives. She is
+    -- still told, and her marks show, once the guild is known (in game,
+    -- after login), though she never saw it accepted.
+    w:Logout(carol)
+    w:RunFor(15)
+    alice.ns.Orders.Accept(carol.guid, away)
+    w:RunFor(10)
+    alice.ns.Orders.Release(carol.guid, away)
+    w:RunFor(10)
+    w:Logout(bob)
+    w:Logout(alice)
+    w:RunFor(15)
+    local DB = "GuildProfessionsRecipesDB"
+    for key, guild in pairs(carol.saved[DB].guilds) do
+        guild.members[alice.guid] = H.DeepCopy(alice.saved[DB].guilds[key].members[alice.guid])
+    end
+    local guildInfo, late = carol.env.GetGuildInfo, true
+    carol.globals = {
+        GetGuildInfo = function()
+            if not late then
+                return guildInfo()
+            end
+        end,
+    }
+    w:Login(carol)
+    w:RunFor(5)
+    H.check(not Badge(carol) and not MicroMark(carol):IsShown(), "no marks while the guild is not known")
+    late = false
+    w:FireEvent(carol, "PLAYER_GUILD_UPDATE")
+    w:RunFor(5)
+    H.check(Told(carol, "Alice released your order: Item100022. Modify or cancel it."), "once it is, she is told of the release")
+    H.check(Badge(carol) and MicroMark(carol):IsShown(), "and its marks show, though she never saw it accepted")
+    carol.globals = nil
     H.eq(#w.errors, 0, "notices: no Lua errors")
     for i = 1, math.min(#w.errors, 5) do
         print(w.errors[i])
@@ -864,6 +1097,469 @@ do
     H.eq(next(carol.ns.Data.OwnState().deliveries or {}) and carol.ns.Data.OwnState().deliveries[carol.ns.Orders.Key(carol.guid, 1)], nil,
         "counts of finished orders are let go")
     H.eq(#w.errors, 0, "deliveries: no Lua errors")
+    for i = 1, math.min(#w.errors, 5) do
+        print(w.errors[i])
+    end
+end
+
+H.section("Orders: the materials list")
+do
+    local w, alice, bob, carol = TailorsWorld(92, true)
+    -- Recipe 21 takes 3 linen (2589) and 1 thread (2320); the game gives no
+    -- materials for recipe 22.
+    w.reagents[21] = { { 2589, 3 }, { 2320, 1 } }
+    w.reagents[22] = {}
+    local tab = alice.env.GuildProfessionsRecipesGuildTab
+    tab._scripts.OnClick(tab)
+    local panel = alice.env.GuildProfessionsRecipesGuildPanel
+    local function Select(index)
+        local subtab = panel.SubTabs.Tabs[index]
+        subtab._scripts.OnClick(subtab)
+    end
+    local button = panel.Materials
+    local function Window()
+        return alice.env.GuildProfessionsRecipesMaterials
+    end
+    -- The window's rows, drawn as the game would: "text [still to come]",
+    -- and whether the text is white (enough) or grey.
+    local function Rows()
+        local rows = {}
+        for _, element in ipairs(Window().ScrollBox._provider.elements) do
+            local row = H.NewObject(alice, "Frame")
+            Window().ScrollBox._view.init(row, element)
+            local text = row.Text._text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+            if row.Coming._shown ~= false and row.Coming._text ~= "" then
+                text = text .. " [" .. row.Coming._text .. "]"
+            end
+            rows[#rows + 1] = { text = text, white = row.Text._text:sub(1, 10) == "|cffffffff", row = row }
+        end
+        return rows
+    end
+    local function Texts()
+        local texts = {}
+        for _, row in ipairs(Rows()) do
+            texts[#texts + 1] = row.text
+        end
+        return table.concat(texts, " | ")
+    end
+    local function Bags(bags)
+        alice.bags = bags
+        w:FireEvent(alice, "BAG_UPDATE_DELAYED")
+        w:RunFor(1)
+    end
+
+    -- Carol orders: two of recipe 21 with her materials, one without, one
+    -- of recipe 22, one only Bob may take, and one nobody takes.
+    carol.ns.Orders.Create({ sl = 197, r = 21, q = 2, m = true })
+    carol.ns.Orders.Create({ sl = 197, r = 21, q = 1 })
+    carol.ns.Orders.Create({ sl = 197, r = 22, q = 1 })
+    carol.ns.Orders.Create({ sl = 197, r = 21, d = bob.guid })
+    carol.ns.Orders.Create({ sl = 197, r = 21, q = 5 })
+    w:RunFor(10)
+    Select(2)
+    H.check(button._shown ~= false and button._enabled == false, "Pending orders has the Materials list button, off without accepted orders")
+    H.eq(button.reason, "You have no accepted orders to make.", "saying why")
+    for id = 1, 3 do
+        alice.ns.Orders.Accept(carol.guid, id)
+    end
+    bob.ns.Orders.Accept(carol.guid, 4)
+    w:RunFor(10)
+    H.check(button._enabled ~= false and button.reason == nil, "with accepted orders, it is on")
+    Select(3)
+    H.eq(button._shown, false, "the other subtabs do not have it")
+    Select(2)
+
+    button._scripts.OnClick(button)
+    H.check(Window() and Window()._shown, "it opens the materials window")
+    H.eq(Window().Summary._text, "For 3 accepted |4order:orders;", "for the three orders Alice accepted")
+    H.eq(Texts(), "0/3 Item2320 [2 still to be received] | 0/9 Item2589 [6 still to be received] | Item100022: materials unknown",
+        "every material summed over them, by name, with what Carol still has to send; then the order whose materials are unknown")
+    local rows = Rows()
+    H.check(not rows[1].white and not rows[2].white, "grey: not enough, even with what is to come")
+
+    -- What she carries counts, and follows her bags.
+    Bags({ [2320] = 1 })
+    rows = Rows()
+    H.check(rows[1].text == "1/3 Item2320 [2 still to be received]" and rows[1].white,
+        "one thread in her bags and two to come: enough, white")
+    -- Part of Carol's materials, by trade: less to come.
+    w:Trade(carol, alice, { { 2589, 4 } }, {})
+    Bags({ [2320] = 1, [2589] = 4 })
+    H.eq(Texts(), "1/3 Item2320 [2 still to be received] | 4/9 Item2589 [2 still to be received] | Item100022: materials unknown",
+        "four linen received: in her bags, two still to come")
+    -- An order completed, items delivered, and an order released no longer
+    -- take anything.
+    alice.ns.Orders.Deliver(carol.guid, 2, 1)
+    alice.ns.Orders.Deliver(carol.guid, 1, 1)
+    alice.ns.Orders.Release(carol.guid, 3)
+    w:RunFor(10)
+    H.eq(Window().Summary._text, "For 1 accepted |4order:orders;", "one order left")
+    H.eq(Texts(), "1/1 Item2320 [1 still to be received] | 4/3 Item2589 [2 still to be received]",
+        "for the one craft it has left; what is to come no more than it takes")
+    -- The material's item: its tooltip, and shift-click links it.
+    rows = Rows()
+    alice.shiftDown = true
+    rows[2].row.Button._scripts.OnClick(rows[2].row.Button)
+    alice.shiftDown = false
+    H.check(alice.linked and alice.linked:find("item:2589", 1, true), "shift-click links the material")
+
+    button._scripts.OnClick(button)
+    H.eq(Window()._shown, false, "the button closes the window too")
+    button._scripts.OnClick(button)
+    H.check(Window()._shown and Window().Empty._shown == false, "and opens it again")
+
+    -- Every material in, and the last one completed: nothing left.
+    w:Trade(carol, alice, { { 2589, 2 }, { 2320, 2 } }, {})
+    w:RunFor(10)
+    H.eq(StateOf(alice, carol, 1), "accepted", "Carol's materials received")
+    H.eq(Texts(), "1/1 Item2320 | 4/3 Item2589", "nothing to come")
+    alice.ns.Orders.Complete(carol.guid, 1)
+    w:RunFor(10)
+    H.check(Window().Empty._shown ~= false and #Window().ScrollBox._provider.elements == 0, "completed: the window says there is nothing to make")
+    H.eq(button._enabled, false, "and the button is off again")
+    H.eq(#w.errors, 0, "materials list: no Lua errors")
+    for i = 1, math.min(#w.errors, 5) do
+        print(w.errors[i])
+    end
+end
+
+H.section("Orders: the materials list as orders are made")
+do
+    local w, alice, _, carol = TailorsWorld(94, true)
+    local LINEN, THREAD, SHIRT = 2589, 2320, 100021
+    -- Recipe 21 makes a shirt from 3 linen and 1 thread; recipe 22 takes 2
+    -- linen and a shirt.
+    w.reagents[21] = { { LINEN, 3 }, { THREAD, 1 } }
+    w.reagents[22] = { { LINEN, 2 }, { SHIRT, 1 } }
+    alice.bags = { [LINEN] = 20, [THREAD] = 4 }
+    carol.ns.Orders.Create({ sl = 197, r = 21, q = 3 })
+    w:RunFor(2)
+    carol.ns.Orders.Create({ sl = 197, r = 22, q = 2 })
+    w:RunFor(2)
+    carol.ns.Orders.Create({ sl = 197, r = 21, q = 1 })
+    w:RunFor(10)
+    for id = 1, 3 do
+        alice.ns.Orders.Accept(carol.guid, id)
+    end
+    w:RunFor(10)
+    local tab = alice.env.GuildProfessionsRecipesGuildTab
+    tab._scripts.OnClick(tab)
+    local panel = alice.env.GuildProfessionsRecipesGuildPanel
+    panel.SubTabs.Tabs[2]._scripts.OnClick(panel.SubTabs.Tabs[2])
+    panel.Materials._scripts.OnClick(panel.Materials)
+    local window = alice.env.GuildProfessionsRecipesMaterials
+    local function Texts()
+        w:RunFor(1)
+        local texts = {}
+        for _, element in ipairs(window.ScrollBox._provider.elements) do
+            local row = H.NewObject(alice, "Frame")
+            window.ScrollBox._view.init(row, element)
+            texts[#texts + 1] = (row.Text._text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""))
+        end
+        return table.concat(texts, " | ")
+    end
+    -- Alice crafts: the materials go, the items come.
+    local function Craft(bags)
+        alice.bags = bags
+        w:FireEvent(alice, "BAG_UPDATE_DELAYED")
+    end
+
+    H.eq(Texts(), "0/2 Item100021 | 4/4 Item2320 | 20/16 Item2589", "three orders: 16 linen, 4 thread and 2 shirts")
+    -- The last order released: what it took is no longer counted.
+    H.check(alice.ns.Orders.Release(carol.guid, 3), "(the last order released)")
+    w:RunFor(10)
+    H.eq(Texts(), "0/2 Item100021 | 4/3 Item2320 | 20/13 Item2589", "an order released: its linen and thread no longer counted")
+    H.eq(window.Summary._text, "For 2 accepted |4order:orders;", "two orders left")
+    -- Two shirts made: one left to make for the first order.
+    Craft({ [LINEN] = 14, [THREAD] = 2, [SHIRT] = 2 })
+    H.eq(Texts(), "0/2 Item100021 | 2/1 Item2320 | 14/7 Item2589",
+        "two shirts made: the first order takes one more; the shirts made are for it, not for the second")
+    -- The third: the first order is made, and takes no thread any more.
+    Craft({ [LINEN] = 11, [THREAD] = 1, [SHIRT] = 3 })
+    H.eq(Texts(), "0/2 Item100021 | 11/4 Item2589", "the first order made: no thread needed any more, its row goes")
+    -- Two more, for the second order to take.
+    Craft({ [LINEN] = 5, [SHIRT] = 5 })
+    H.eq(Texts(), "2/2 Item100021 | 5/4 Item2589", "two shirts more than the first order takes: the second has them")
+    H.check(window.Empty._shown == false, "(rows shown)")
+    -- The second made too: nothing to make, only to deliver.
+    Craft({ [LINEN] = 1, [SHIRT] = 3, [100022] = 2 })
+    H.check(Texts() == "" and window.Empty._shown ~= false and window.Empty._text == "All of it is made: it only remains to deliver it.",
+        "all made: the window says only delivering is left")
+    H.eq(window.Summary._text, "For 2 accepted |4order:orders;", "the orders are still to deliver")
+    -- A shirt sold: the first order takes one more again.
+    Craft({ [LINEN] = 1, [SHIRT] = 2, [100022] = 2 })
+    H.eq(Texts(), "0/1 Item2320 | 1/3 Item2589", "an item made gone from the bags is to be made again")
+    -- Two orders of a shirt, the older one with Carol's materials still to
+    -- come: the one shirt made is for the older one.
+    alice.ns.Orders.Complete(carol.guid, 1)
+    alice.ns.Orders.Complete(carol.guid, 2)
+    carol.ns.Orders.Create({ sl = 197, r = 21, q = 1, m = true })
+    w:RunFor(2)
+    carol.ns.Orders.Create({ sl = 197, r = 21, q = 1 })
+    w:RunFor(10)
+    alice.ns.Orders.Accept(carol.guid, 4)
+    alice.ns.Orders.Accept(carol.guid, 5)
+    w:RunFor(10)
+    Craft({ [LINEN] = 1, [SHIRT] = 1 })
+    H.eq(Texts(), "0/1 Item2320 | 1/3 Item2589", "one shirt made of two: one more to make")
+    local coming = 0
+    for _, element in ipairs(window.ScrollBox._provider.elements) do
+        coming = coming + (element.coming or 0)
+    end
+    H.eq(coming, 0, "the shirt made is the older order's, whose materials are to come: the one left takes none from Carol")
+    H.eq(#w.errors, 0, "made: no Lua errors")
+    for i = 1, math.min(#w.errors, 5) do
+        print(w.errors[i])
+    end
+end
+
+H.section("Orders: preparing the materials")
+do
+    local w, alice, _, carol = TailorsWorld(93, true)
+    local LINEN, THREAD, ORE = 2589, 2320, 2771
+    -- Recipe 21 takes 3 linen and 1 thread; stacks of 20. Alice's bags hold
+    -- linen in two stacks and some thread; her bank, more of both.
+    w.reagents[21] = { { LINEN, 3 }, { THREAD, 1 } }
+    w:SetContainer(alice, 0, { size = 16, [1] = { LINEN, 8 }, [2] = { LINEN, 4 }, [3] = { THREAD, 2 }, [4] = { ORE, 7 } })
+    w:SetContainer(alice, 6, { size = 28, [1] = { LINEN, 20 }, [2] = { THREAD, 20 } })
+    local env, ns = alice.env, alice.ns
+    -- The stacks of an item in a container, smallest first: "4 8".
+    local function Stacks(bag, itemID)
+        local list = {}
+        for slot, item in pairs(alice.containers[bag] or {}) do
+            if type(slot) == "number" and item[1] == itemID then
+                list[#list + 1] = item[2]
+            end
+        end
+        table.sort(list)
+        return table.concat(list, " ")
+    end
+    -- The counts of the stacks kept for a material, smallest first.
+    local function Kept(itemID)
+        local prepared = ns.Data.OwnState().prepared or {}
+        local list = {}
+        for _, count in pairs(prepared[itemID] or {}) do
+            list[#list + 1] = count
+        end
+        table.sort(list)
+        return table.concat(list, " ")
+    end
+    local function Told(text, since)
+        for i = (since or 0) + 1, #alice.printed do
+            if alice.printed[i]:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):find(text, 1, true) then
+                return true
+            end
+        end
+        return false
+    end
+
+    -- Carol orders five without materials, and two with hers: they take 21
+    -- linen and 7 thread, 6 and 2 of them to come from her.
+    carol.ns.Orders.Create({ sl = 197, r = 21, q = 5 })
+    carol.ns.Orders.Create({ sl = 197, r = 21, q = 2, m = true })
+    w:RunFor(10)
+    alice.ns.Orders.Accept(carol.guid, 1)
+    alice.ns.Orders.Accept(carol.guid, 2)
+    w:RunFor(10)
+    local tab = env.GuildProfessionsRecipesGuildTab
+    tab._scripts.OnClick(tab)
+    local panel = env.GuildProfessionsRecipesGuildPanel
+    panel.SubTabs.Tabs[2]._scripts.OnClick(panel.SubTabs.Tabs[2])
+    panel.Materials._scripts.OnClick(panel.Materials)
+    local window = env.GuildProfessionsRecipesMaterials
+    local button = window.Prepare
+    local function Texts()
+        w:RunFor(1)
+        local texts = {}
+        for _, element in ipairs(window.ScrollBox._provider.elements) do
+            local row = H.NewObject(alice, "Frame")
+            window.ScrollBox._view.init(row, element)
+            local text = row.Text._text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+            if row.Coming._shown ~= false and row.Coming._text ~= "" then
+                text = text .. " [" .. row.Coming._text:gsub("|A.-|a ", "") .. "]"
+            end
+            texts[#texts + 1] = text
+        end
+        return table.concat(texts, " | ")
+    end
+    local function Tip()
+        w:RunFor(1)
+        button._scripts.OnEnter(button)
+        return table.concat(env.GameTooltip._lines, "\n")
+    end
+    -- Presses the button, if it is on, and waits for it to finish.
+    local function Press()
+        w:RunFor(1)
+        if not button:IsShown() or not button:IsEnabled() then
+            return false
+        end
+        button._scripts.OnClick(button)
+        for _ = 1, 60 do
+            w:RunFor(1)
+            if not ns.Prepare.Busy() then
+                break
+            end
+        end
+        w:RunFor(1)
+        return true
+    end
+
+    H.eq(Texts(), "2/7 Item2320 [2 still to be received] | 12/21 Item2589 [6 still to be received]", "the list counts the bags' stacks")
+    H.check(button._text == "Prepare" and button:IsEnabled(), "the window has a Prepare button, on with something to keep")
+    local tip = Tip()
+    H.check(tip:find("Keeps in your bags the materials still missing, from your bags' stacks not kept yet.", 1, true)
+        and tip:find("Your bags hold only part of them: open your bank to bring the rest.", 1, true),
+        "without the bank, it keeps what the bags hold, and says the rest is in the bank: " .. tip)
+
+    -- Without the bank: the bags' linen made one stack, the thread kept as it is.
+    local printed, moves = #alice.printed, alice.moves or 0
+    H.check(Press(), "Prepare runs without the bank")
+    H.check(Stacks(0, LINEN) == "12" and Stacks(0, THREAD) == "2", "the linen's two stacks made one; the thread stays as it is")
+    H.check(Kept(LINEN) == "12" and Kept(THREAD) == "2", "both kept")
+    H.eq((alice.moves or 0) - moves, 1, "one move: the 4 onto the 8")
+    H.check(Told("materials kept in your bags; still missing: ", printed) and Told("item:2589|h[Item]|h x3", printed)
+        and Told("item:2320|h[Item]|h x3", printed), "it says what is still missing, as items")
+    H.eq(Texts(), "2/7 Item2320 [2 kept · 2 still to be received] | 12/21 Item2589 [12 kept · 6 still to be received]",
+        "each row says how many are kept")
+    tip = Tip()
+    H.check(button._text == "Release all" and button:IsEnabled() and tip:find("Lets go of the materials kept in your bags.", 1, true)
+        and tip:find("Your bags hold none of the materials still missing: open your bank to bring them.", 1, true),
+        "nothing more to keep from the bags: the button lets go, and says why it cannot keep more: " .. tip)
+
+    -- At the bank: the rest, split off its stacks onto the kept ones.
+    w:OpenBank(alice)
+    tip = Tip()
+    H.check(button._text == "Prepare" and button:IsEnabled() and tip:find("and from your bank.", 1, true),
+        "with the bank open, Prepare again, from the bank too")
+    printed = #alice.printed
+    Press()
+    H.check(Stacks(0, LINEN) == "15" and Stacks(6, LINEN) == "17", "3 linen split off the bank's 20 onto the kept 12")
+    H.check(Stacks(0, THREAD) == "5" and Stacks(6, THREAD) == "17", "3 thread onto the kept 2")
+    H.check(Kept(LINEN) == "15" and Kept(THREAD) == "5", "all of it kept")
+    H.check(Told("materials ready in your bags.", printed), "it says so")
+    H.check(button._text == "Release all" and Tip():find("Lets go of the materials kept in your bags.", 1, true), "ready: Release all")
+
+    -- The padlocks in the game's backpack window.
+    local buttons = {}
+    for slot = 1, 16 do
+        local item = H.NewObject(alice, "ItemButton")
+        item.GetBagID = function()
+            return 0
+        end
+        item.GetID = function()
+            return slot
+        end
+        buttons[slot] = item
+    end
+    env.ContainerFrame1 = H.NewObject(alice, "Frame")
+    env.ContainerFrame1.UpdateItems = function() end
+    env.ContainerFrame1.EnumerateValidItems = function()
+        return ipairs(buttons)
+    end
+    ns.BagLocks.Init()
+    local function Padlocks()
+        env.ContainerFrame1:UpdateItems()
+        local list = {}
+        for slot, item in ipairs(buttons) do
+            local lock = ns.BagLocks.LockOf(item)
+            if lock and lock:IsShown() then
+                list[#list + 1] = slot
+            end
+        end
+        return table.concat(list, " ")
+    end
+    H.eq(Padlocks(), "1 3", "a padlock on each kept stack")
+    local lock = ns.BagLocks.LockOf(buttons[1])
+    lock._scripts.OnEnter(lock)
+    tip = table.concat(env.GameTooltip._lines, "\n")
+    H.check(tip:find("Kept for your crafting orders", 1, true) and tip:find("lets it go", 1, true),
+        "its tooltip says what for, and what lets it go")
+
+    -- Release all, then Prepare again: the stacks are where they were.
+    printed, moves = #alice.printed, alice.moves or 0
+    H.check(Press(), "Release all can be pressed")
+    H.check(Kept(LINEN) == "" and Kept(THREAD) == "" and Padlocks() == "", "nothing kept, no padlocks")
+    H.check(Told("materials no longer kept in your bags.", printed), "it says so")
+    H.eq(button._text, "Prepare", "the button is Prepare again")
+    Press()
+    H.check(Kept(LINEN) == "15" and Kept(THREAD) == "5" and (alice.moves or 0) == moves, "kept again as they are: no move")
+
+    -- Carol's materials arrive: no longer to come, they are to be kept too.
+    w:Trade(carol, alice, { { LINEN, 6 }, { THREAD, 2 } }, {})
+    alice.containers[0][5] = { LINEN, 6 }
+    alice.containers[0][6] = { THREAD, 2 }
+    w:FireEvent(alice, "BAG_UPDATE_DELAYED")
+    w:RunFor(10)
+    H.eq(Texts(), "7/7 Item2320 [5 kept] | 21/21 Item2589 [15 kept]", "nothing to come")
+    H.check(button._text == "Prepare" and button:IsEnabled(), "Prepare, for what came")
+    Press()
+    H.check(Kept(LINEN) == "6 15" and Stacks(0, LINEN) == "6 15", "her 6 linen kept as they are: a stack of their own fits best")
+    H.check(Kept(THREAD) == "7" and Stacks(0, THREAD) == "7", "her 2 thread onto the kept 5")
+    H.eq(Padlocks(), "1 3 5", "with their padlocks")
+
+    -- The order of five completed: what it took is no longer kept, the
+    -- biggest stacks first, while the rest covers the other order.
+    H.check(alice.ns.Orders.Complete(carol.guid, 1), "(the order of five completed)")
+    w:RunFor(10)
+    H.check(Kept(LINEN) == "6" and Kept(THREAD) == "7", "the 15 linen let go, the 6 still kept; the thread still covers the 2")
+    -- Split by hand: let go.
+    env.C_Container.SplitContainerItem(0, 5, 2)
+    env.C_Container.PickupContainerItem(0, 9)
+    w:RunFor(2)
+    H.check(Kept(LINEN) == "" and Padlocks() == "3", "a kept stack split by hand is let go")
+    -- The other order released: no order takes the materials any more.
+    H.check(alice.ns.Orders.Release(carol.guid, 2), "(the other order released)")
+    w:RunFor(10)
+    H.check(Kept(THREAD) == "" and Padlocks() == "", "no order takes them any more: all let go")
+
+    -- Two more orders: two of recipe 21, and two of recipe 22, which takes
+    -- linen and a dye nobody has.
+    local DYE = 2324
+    w.reagents[22] = { { LINEN, 1 }, { DYE, 1 } }
+    carol.ns.Orders.Create({ sl = 197, r = 21, q = 2 })
+    carol.ns.Orders.Create({ sl = 197, r = 22, q = 2 })
+    w:RunFor(10)
+    alice.ns.Orders.Accept(carol.guid, 3)
+    alice.ns.Orders.Accept(carol.guid, 4)
+    w:RunFor(10)
+
+    -- No room in the bags: nothing moves.
+    w:SetContainer(alice, 0, { size = 2, [1] = { ORE, 5 }, [2] = { ORE, 5 } })
+    w:RunFor(1)
+    tip = Tip()
+    H.check(button._text == "Prepare" and not button:IsEnabled() and tip:find("Not enough room in your bags: 2 free |4slot:slots; needed.", 1, true),
+        "without room for it all, Prepare is off, and says how much room it takes: " .. tip)
+    -- Something on the cursor: it waits.
+    w:SetContainer(alice, 0, { size = 16, [1] = { ORE, 5 } })
+    env.C_Container.PickupContainerItem(0, 1)
+    printed = #alice.printed
+    H.check(not ns.Prepare.Run("prepare") and Told("put down what you hold on the cursor first.", printed), "not with something on the cursor")
+    env.ClearCursor()
+    -- The bank closed while a move from it is under way: it stops.
+    w.moveDelay = 30
+    w:RunFor(1)
+    button._scripts.OnClick(button)
+    w:RunFor(1)
+    H.check(ns.Prepare.Busy(), "(preparing, a move from the bank under way)")
+    w:CloseBank(alice)
+    w:RunFor(2)
+    H.check(not ns.Prepare.Busy(), "the bank closed, it stops")
+    w:RunFor(40)
+    w:OpenBank(alice)
+    -- The server too slow: it stops.
+    printed = #alice.printed
+    Press()
+    H.check(Told("the items did not move in time: try again.", printed) and not ns.Prepare.Busy(), "a move the server does not carry out in time stops it")
+    w.moveDelay = nil
+    w:RunFor(40)
+    -- What nobody has is said to be missing.
+    printed = #alice.printed
+    Press()
+    H.check(Kept(LINEN) == "8" and Kept(THREAD) == "2", "the linen and thread kept")
+    H.check(Told("still missing: ", printed) and Told("item:2324|h[Item]|h x2", printed) and not Told("item:2589", printed),
+        "the dye, found nowhere, is said to be missing")
+    w:CloseBank(alice)
+    H.eq(#w.errors, 0, "preparing: no Lua errors")
     for i = 1, math.min(#w.errors, 5) do
         print(w.errors[i])
     end

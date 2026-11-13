@@ -77,6 +77,21 @@ local function Needed(order)
     return needed
 end
 
+-- As its crafter: the materials of an order waiting for them that its
+-- requester has yet to send us, { [itemID] = count } (MaterialsList.lua).
+-- Empty when the order's materials are unknown.
+function Deliveries.MaterialsOwed(view)
+    local tally = Tallies()[view.key]
+    local got = tally and tally.mats or {}
+    local owed = {}
+    for itemID, count in pairs(Needed(view.order) or {}) do
+        if count > (got[itemID] or 0) then
+            owed[itemID] = count - (got[itemID] or 0)
+        end
+    end
+    return owed
+end
+
 -- As its crafter: materials from the requester of an order waiting for them.
 local function CountMaterials(view, received, tally)
     local needed = Needed(view.order)

@@ -314,6 +314,10 @@ H.check(ReadFile(".pkgmeta"):find("required%-dependencies:\n    %- lib%-guild%-s
 H.check(ReadFile("GuildProfessionsRecipes.toc"):find("## Dependencies: LibGuildSync", 1, true) ~= nil, "LibGuildSync is a dependency")
 -- A trial build talks on its own prefix (Core.lua): fine to try in game,
 -- not to release.
+local announced = ReadFile("Core.lua"):match('\nlocal ANNOUNCE_AS = "([%d%.]+)"')
+if announced then
+    print(("  NOTE: Core.lua tells the guild this is %s: set ANNOUNCE_AS to nil before tagging a release"):format(announced))
+end
 if ReadFile("Core.lua"):find("\n    trial = true,", 1, true) then
     print("  NOTE: trial is on in Core.lua: turn it off before tagging a release")
 end

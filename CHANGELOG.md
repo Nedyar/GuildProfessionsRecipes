@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.11.0 - Marks, released orders and the materials list
+
+- **Notification marks, as the game shows them.** While an order waits for you, a mark shows on the micro menu's Guild & Communities button, on the Recipes & Orders tab, on the subtab that lists it and on the order's icon. Once one of your orders is accepted, it is marked until you point at it. Changes made while you were away, or by another of your characters, are marked and told in the chat at login too.
+- **Released orders wait for you.** When a crafter releases one of your orders, it says who released it and waits until you modify or cancel it: you are told in the chat, the marks show until you do, and nobody can take it meanwhile. Modified, it is a new order, open to be taken again.
+- **Materials list.** A button under Pending orders opens a window with every material the orders you accepted still take, summed over them: how many you carry over how many they take, and what their requesters are still to send you. What you made already takes nothing more, and when everything is made it says only delivering is left.
+- **Prepare.** The materials list's Prepare button keeps those materials in your bags: with your bank open it brings what is missing from it; without it, it keeps what your bags hold. It splits and joins stacks so each material takes the fewest, and shows a padlock on each kept stack in your bags. Moving a kept stack within your bags keeps it; splitting it, adding to it, using it up or taking it out of your bags lets it go. Once nothing more can be kept, the button is **Release all**.
+- **Delete finished and cancelled.** A button under Requested orders deletes all your finished and cancelled orders at once; its tooltip lists them.
+- **Fixed:** clicking an order whose recipe is far down the guild's recipe list no longer shows a Lua error.
+- **Nobody has to update at once:** members on 0.10 keep sharing everything. To them, a released open order looks pending again, and a released personal order looks declined.
+
 ## 0.10.1 - Items that bind when made
 
 - **Recipes whose item binds when made are hidden.** Such an item binds to its crafter as it is made, so nobody can craft it for you. The Filter menu's new **Show items that bind when made** brings them back; like the other filters, it is cleared when another profession is shown.

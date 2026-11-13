@@ -30,6 +30,33 @@ local function Name(guid)
     return ns.Data.NameOf(guid, ns.Data.CurrentGuild(false) and ns.Data.CurrentGuild(false).members[guid])
 end
 
+-- Our accepted orders whose notice we saw, pointing at their row:
+-- OwnState().acceptedSeen = { [order key] = the crafter's GUID }, kept per
+-- character, so that another crafter's acceptance is a new notice.
+local function AcceptedSeen()
+    local own = ns.Data.OwnState()
+    own.acceptedSeen = own.acceptedSeen or {}
+    return own.acceptedSeen
+end
+
+-- Whether an order is ours, accepted (also once its materials are in), and
+-- its notice not seen yet.
+local function AcceptedUnseen(view)
+    return view.requester == ns.playerGUID and view.state == "accepted" and AcceptedSeen()[view.key] ~= view.crafter
+end
+
+-- Pointing at a row, or at its icon: the notice of our accepted order in
+-- it is seen. Its mark goes, and the subtabs' and tabs' marks are counted
+-- again, the list left as it is.
+local function SeeRow(row)
+    local view = row.view
+    if view and AcceptedUnseen(view) then
+        AcceptedSeen()[view.key] = view.crafter
+        row.Mark:Hide()
+        ns.GuildTab.UpdateMarks()
+    end
+end
+
 -- Where a taken order stands, before any count of its items delivered.
 local function TakenText(view, mode)
     local byUs = view.crafter == ns.playerGUID
@@ -58,6 +85,8 @@ local function StateText(view, mode)
         return L["Open order"]
     elseif state == "denied" then
         return L["Denied by %s"]:format(Name(order.d))
+    elseif state == "released" then
+        return L["Released by %s"]:format(Name(view.releaser))
     elseif ns.Orders.IsTaken(state) then
         local text = TakenText(view, mode)
         if state ~= "completed" and (view.delivered or 0) > 0 then
@@ -156,7 +185,7 @@ local function Actions(view, mode)
         local craftable = ns.Orders.CanCraft(view.order)
         return { { "accept", ACCEPT or "Accept", craftable, not craftable and L["You don't know this recipe."] or nil } }
     elseif mode == "mine" then
-        if state == "pending" or state == "denied" then
+        if state == "pending" or state == "denied" or state == "released" then
             return { { "modify", L["Modify"], true }, { "cancel", CANCEL or "Cancel", true } }
         elseif ns.Orders.IsTaken(state) then
             local paid = ns.Orders.TipMissing(view) == 0
@@ -182,6 +211,7 @@ local function RowOnEnter(row)
     if not view then
         return
     end
+    SeeRow(row)
     GameTooltip:SetOwner(row, "ANCHOR_RIGHT")
     GameTooltip:SetText(row.Title:GetText() or "", 1, 1, 1)
     GameTooltip:AddLine(L["From %s"]:format(Name(view.requester)), NORMAL_FONT_COLOR:GetRGB())
@@ -227,10 +257,13 @@ local function CreateRow(row)
     row.Item:SetAllPoints(row.Icon)
     row.Item:SetScript("OnEnter", function(self)
         if row.view then
+            SeeRow(row)
             ns.Viewer.ShowOutputTooltip(self, row.view.order.r)
         end
     end)
     row.Item:SetScript("OnLeave", GameTooltip_Hide)
+    -- On the icon of an order waiting for us, the mark the tabs show.
+    row.Mark = ns.GuildTab.NewMark(row.Item, -4, -4)
     row.Item:SetScript("OnClick", function()
         if not row.view then
             return
@@ -298,6 +331,7 @@ local function InitRow(row, data)
     local name, icon = ns.Viewer.RecipeOutput(view.order.r)
     row.Icon:SetTexture(icon)
     row.Icon:SetDesaturated(ns.Orders.IsClosed(view.state))
+    row.Mark:SetShown(OrderList.WaitsForUs(view))
     row.Title:SetText(view.order.q > 1 and ("%s x%d"):format(name, view.order.q) or name)
     local state = StateText(view, data.mode)
     if data.mode ~= "mine" then
@@ -364,27 +398,92 @@ function OrderList.Show(list, mode, craftable, showMine)
     list.Empty:SetShown(#elements == 0)
 end
 
+-- Whether an order waits for us to act, as the notification marks count:
+-- directed to us and pending (to accept or decline), or accepted by us (to
+-- make); one of ours denied or released (to change or cancel), waiting for
+-- our materials, or completed (to finish), or accepted and its row not
+-- pointed at yet.
+function OrderList.WaitsForUs(view)
+    if view.requester == ns.playerGUID then
+        return view.state == "denied" or view.state == "released" or view.state == "materials"
+            or view.state == "completed" or AcceptedUnseen(view)
+    end
+    return view.state == "pending" and view.order.d == ns.playerGUID
+        or view.state == "accepted" and view.crafter == ns.playerGUID
+end
+
 -- How many orders wait for us to act: directed to us, or accepted by us.
 function OrderList.WaitingForMe()
     local count = 0
     for _, view in ipairs(OrderList.Views("pending")) do
-        if view.state == "pending" or view.state == "accepted" then
+        if OrderList.WaitsForUs(view) then
             count = count + 1
         end
     end
     return count
 end
 
--- How many of our own orders wait for us: denied (to change or cancel),
--- waiting for our materials, or completed (to finish).
+-- How many of our own orders wait for us: denied or released (to change
+-- or cancel), waiting for our materials, completed (to finish), or
+-- accepted and not pointed at yet.
 function OrderList.WaitingOnMine()
     local count = 0
     for _, view in ipairs(OrderList.Views("mine")) do
-        if view.state == "denied" or view.state == "materials" or view.state == "completed" then
+        if OrderList.WaitsForUs(view) then
             count = count + 1
         end
     end
     return count
+end
+
+-- The button under Requested orders --------------------------------------------------
+
+local LISTED = 10  -- orders the button's tooltip names; the rest are counted
+
+local function ItemText(order)
+    local name = ns.Viewer.RecipeOutput(order.r)
+    return order.q > 1 and ("%s x%d"):format(name, order.q) or name
+end
+
+-- Our closed orders (finished or cancelled), which the Delete finished and
+-- cancelled button deletes at once.
+function OrderList.Closed()
+    local list = {}
+    for _, view in ipairs(OrderList.Views("mine")) do
+        if ns.Orders.IsClosed(view.state) then
+            list[#list + 1] = view
+        end
+    end
+    return list
+end
+
+-- Its tooltip: what it does, and the orders it deletes.
+function OrderList.DeleteClosedOnEnter(button)
+    local closed = OrderList.Closed()
+    GameTooltip:SetOwner(button, "ANCHOR_TOP")
+    GameTooltip:SetText(button:GetText() or "", 1, 1, 1)
+    local r, g, b = NORMAL_FONT_COLOR:GetRGB()
+    GameTooltip:AddLine(#closed > 0 and L["Deletes your finished and cancelled orders (%d)."]:format(#closed)
+        or L["You have no finished or cancelled orders."], r, g, b, true)
+    for index, view in ipairs(closed) do
+        if index > LISTED then
+            GameTooltip:AddLine(L["and %d more |4order:orders;"]:format(#closed - LISTED), 0.7, 0.7, 0.7)
+            break
+        end
+        GameTooltip:AddDoubleLine(ItemText(view.order), StateText(view, "mine"), 1, 1, 1, 0.7, 0.7, 0.7)
+    end
+    GameTooltip:Show()
+end
+
+-- Deletes them, as each one's Delete button would.
+function OrderList.DeleteClosed()
+    local count = ns.Orders.RemoveClosed()
+    if count > 0 then
+        ns.Print(L["finished and cancelled orders deleted: %d."], count)
+    end
+    if OrderList.onChange then
+        OrderList.onChange()
+    end
 end
 
 -- Notices ---------------------------------------------------------------------------
@@ -407,7 +506,10 @@ local function Announce(view, before, wasOurs)
             ns.Print(L["%s completed your order: %s. Mark it finished once you have it."], Name(view.crafter), item)
         elseif state == "denied" then
             ns.Print(L["%s declined your order: %s."], Name(view.order.d), item)
+        elseif state == "released" then
+            ns.Print(L["%s released your order: %s. Modify or cancel it."], Name(view.releaser), item)
         elseif state == "pending" and ns.Orders.IsTaken(before) then
+            -- Given back by a member on 0.10 or earlier.
             ns.Print(L["your order is open again: %s."], item)
         end
     elseif state == "pending" and view.order.d == ns.playerGUID and not wasOurs then
@@ -450,10 +552,21 @@ function OrderList.CheckNotices()
         end
     end
     own.orderStates, own.ordersTaken, own.tipsOwed = now, taken, owed
+    -- The notices seen of orders no longer accepted are forgotten.
+    for key in pairs(own.acceptedSeen or {}) do
+        if now[key] ~= "accepted" then
+            own.acceptedSeen[key] = nil
+        end
+    end
 end
 
 function OrderList.Init()
-    ns.On("DataChanged", function()
+    -- Also once the roster is read: at login the guild is not known yet,
+    -- and what changed while we were away may already be in the saved data
+    -- (changed by another character of the account).
+    local function Check()
         ns.Debounce("OrderNotices", 1, OrderList.CheckNotices)
-    end)
+    end
+    ns.On("DataChanged", Check)
+    ns.On("RosterUpdated", Check)
 end

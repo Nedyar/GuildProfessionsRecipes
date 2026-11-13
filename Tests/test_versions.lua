@@ -2,8 +2,8 @@ local H = ...
 
 -- Members on the last release and members on this version share one guild:
 -- both must keep talking. The release is taken from its git tag
--- (H.Release).
-local RELEASE = "v0.9.1"
+-- (H.Release); it runs on this LibGuildSync.
+local RELEASE = "v0.10.1"
 
 H.section("Versions: against " .. RELEASE)
 local old = H.Release(RELEASE)
@@ -11,7 +11,7 @@ if not old then
     print("   NOTE: " .. RELEASE .. " could not be extracted with git: skipped")
     return
 end
-local OLD = { old }
+local OLD = { H.ADDONS[1], old }
 
 local function Errors(world, label)
     H.eq(#world.errors, 0, "no errors: " .. label)
@@ -75,5 +75,23 @@ for _, case in ipairs({
     H.check(tailor.ns.Orders.Accept(cook.guid, id) ~= nil, label .. ": and accepts it")
     world:RunFor(10)
     H.eq(StateOf(cook, cook, id), "accepted", label .. ": the cook sees it accepted")
+
+    -- Given back. This version writes it as a refusal at the order's own
+    -- time: released, it waits for its requester. The release cannot tell
+    -- it from a refusal, which an open order ignores: pending again. The
+    -- release removes its answer instead: pending again on this version.
+    local newTailor = tailorAddons == nil
+    H.check(tailor.ns.Orders.Release(cook.guid, id) ~= nil, label .. ": the tailor gives it back")
+    world:RunFor(10)
+    H.eq(StateOf(tailor, cook, id), newTailor and "released" or "pending", label .. ": released, as the tailor's version has it")
+    H.eq(StateOf(cook, cook, id), "pending", label .. ": open again for the cook")
+    -- A personal order given back: declined, for the release.
+    local personal = cook.ns.Orders.Create({ sl = 197, r = 21, d = tailor.guid })
+    world:RunFor(10)
+    H.check(tailor.ns.Orders.Accept(cook.guid, personal) ~= nil, label .. ": the tailor accepts a personal order")
+    world:RunFor(10)
+    H.check(tailor.ns.Orders.Release(cook.guid, personal) ~= nil, label .. ": and gives it back")
+    world:RunFor(10)
+    H.eq(StateOf(cook, cook, personal), newTailor and "denied" or "pending", label .. ": declined, or pending again, for the cook")
     Errors(world, label)
 end

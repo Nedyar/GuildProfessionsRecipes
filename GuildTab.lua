@@ -33,6 +33,7 @@ local TAB_LEVEL = 510       -- Blizzard's tabs' frame level
 local PAGE_LEVEL = 1250     -- over everything in the content (the chat's edit box is at 1200)
 local BUTTON_WIDTH, BUTTON_HEIGHT, BUTTON_GAP = 190, 46, 6
 local COLUMNS = 3
+local MATERIALS_WIDTH = 160    -- the Materials list button, for its longest translation
 local CARD_BAND_CENTER = 0.45  -- where on the profession's card art the button's band is cut
 -- Blizzard's tabs, top to bottom.
 local BLIZZARD_TABS = { "ChatTab", "RosterTab", "GuildBenefitsTab", "GuildInfoTab", "GuildPreferredPlaySettingsTab" }
@@ -57,6 +58,7 @@ local SECONDARY = {
 }
 
 local communities, tab, page
+local microMark      -- on the micro menu's button (CreateMicroMark)
 local remembered     -- the Blizzard tab that was selected when our panel opened
 local hiddenChatBar  -- the chat's scroll bar, while our panel hides it
 local faded = {}     -- [Blizzard frame] = its alpha, while our panel hides it
@@ -254,7 +256,23 @@ local function RefreshProfessions()
     end
 end
 
--- The subtabs' names, with how many orders wait for us.
+-- Blizzard's notification mark, as its Roster tab shows it for applicants:
+-- centred on parent's top right corner (moved by x, y), on a frame of its
+-- own, over parent, so none of parent's glows (selected, pointed at) covers
+-- it. At the atlas's own size. Hidden at first.
+function GuildTab.NewMark(parent, x, y)
+    local mark = CreateFrame("Frame", nil, parent)
+    mark:SetSize(1, 1)
+    mark:SetPoint("CENTER", parent, "TOPRIGHT", x or 0, y or 0)
+    mark.Icon = mark:CreateTexture(nil, "OVERLAY")
+    mark.Icon:SetAtlas("communities-icon-notification", true)
+    mark.Icon:SetPoint("CENTER")
+    mark:Hide()
+    return mark
+end
+
+-- The subtabs' names, with how many orders wait for us, and the mark on
+-- those that have some.
 local function UpdateSubTabs()
     local waiting, mine = ns.OrderList.WaitingForMe(), ns.OrderList.WaitingOnMine()
     local texts = {
@@ -263,11 +281,21 @@ local function UpdateSubTabs()
         L["Order list"],
         mine > 0 and ("%s (%d)"):format(L["Requested orders"], mine) or L["Requested orders"],
     }
+    local counts = { 0, waiting, 0, mine }
     for i, subtab in ipairs(page.SubTabs.Tabs) do
         subtab:SetText(texts[i])
         PanelTemplates_TabResize(subtab, 0)
     end
     PanelTemplates_SetTab(page.SubTabs, selected)
+    -- The mark on the top right corner of the subtab's art, not of its
+    -- frame: the art stands at the frame's bottom, shorter than it, and
+    -- shorter still while not selected (PanelTopTabButtonMixin).
+    for i, subtab in ipairs(page.SubTabs.Tabs) do
+        local art = (i == selected and subtab.MiddleActive or subtab.Middle) or subtab
+        subtab.Mark:ClearAllPoints()
+        subtab.Mark:SetPoint("CENTER", art, "TOPRIGHT", 0, -2)
+        subtab.Mark:SetShown(counts[i] > 0)
+    end
 end
 
 local function RefreshPage()
@@ -283,6 +311,16 @@ local function RefreshPage()
     for _, check in ipairs({ page.Craftable, page.HideMine }) do
         check:SetShown(mode == "open")
         check.Label:SetShown(mode == "open")
+    end
+    page.Materials:SetShown(mode == "pending")
+    if mode == "pending" then
+        local any = #ns.MaterialsList.Orders() > 0
+        page.Materials:SetEnabled(any)
+        page.Materials.reason = not any and L["You have no accepted orders to make."] or nil
+    end
+    page.DeleteClosed:SetShown(mode == "mine")
+    if mode == "mine" then
+        page.DeleteClosed:SetEnabled(#ns.OrderList.Closed() > 0)
     end
     if professions then
         RefreshProfessions()
@@ -333,6 +371,7 @@ local function CreateSubTabs()
         subtab:SetScript("OnClick", function(self)
             SelectSubTab(self:GetID())
         end)
+        subtab.Mark = GuildTab.NewMark(subtab)
         tabs[i] = subtab
     end
     holder.Tabs = tabs
@@ -484,17 +523,76 @@ local function CreatePage()
         hideMine = checked
     end)
     page.HideMine:SetPoint("LEFT", page.Craftable.Label, "RIGHT", 16, 0)
+    -- Under Pending orders: the materials of the orders we accepted
+    -- (MaterialsList.lua).
+    page.Materials = CreateFrame("Button", nil, page, "UIPanelButtonTemplate")
+    page.Materials:SetSize(MATERIALS_WIDTH, 22)
+    page.Materials:SetPoint("LEFT", page.Content, "BOTTOMLEFT", 2, -15)
+    page.Materials:SetText(L["Materials list"])
+    page.Materials:SetMotionScriptsWhileDisabled(true)
+    page.Materials:SetScript("OnClick", ns.MaterialsList.Toggle)
+    page.Materials:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText(L["Materials list"], 1, 1, 1)
+        GameTooltip:AddLine(self.reason or L["Every material your accepted orders take, and how many you carry."], nil, nil, nil, true)
+        GameTooltip:Show()
+    end)
+    page.Materials:SetScript("OnLeave", GameTooltip_Hide)
+    -- Under Requested orders, on the right: our finished and cancelled
+    -- orders deleted at once (OrderList.DeleteClosed).
+    page.DeleteClosed = CreateFrame("Button", nil, page, "UIPanelButtonTemplate")
+    page.DeleteClosed:SetText(L["Delete finished and cancelled"])
+    page.DeleteClosed:SetSize(math.max(page.DeleteClosed:GetTextWidth() + 32, 110), 22)
+    page.DeleteClosed:SetPoint("RIGHT", page.Content, "BOTTOMRIGHT", 0, -15)
+    page.DeleteClosed:SetMotionScriptsWhileDisabled(true)
+    page.DeleteClosed:SetScript("OnClick", ns.OrderList.DeleteClosed)
+    page.DeleteClosed:SetScript("OnEnter", ns.OrderList.DeleteClosedOnEnter)
+    page.DeleteClosed:SetScript("OnLeave", GameTooltip_Hide)
     page:Hide()
 end
 
 -- The tab ---------------------------------------------------------------------------
 
--- Blizzard's notification mark, as its Roster tab shows for applicants:
--- while some order waits for us to act.
+-- The notification mark (GuildTab.NewMark), while some order waits for us
+-- to act: on our tab, and on the micro menu's button that opens the guild
+-- window.
 local function UpdateBadge()
+    local shown = ns.OrderList.WaitingForMe() + ns.OrderList.WaitingOnMine() > 0
     if tab then
-        tab.Badge:SetShown(ns.OrderList.WaitingForMe() + ns.OrderList.WaitingOnMine() > 0)
+        tab.Badge:SetShown(shown)
     end
+    if microMark then
+        microMark:SetShown(shown)
+    end
+end
+
+-- The mark on the micro menu's Guild & Communities button, as the game
+-- shows its own there (unread messages, invitations): of its template, on
+-- a frame of our own, which the game's updates leave alone. When it shows
+-- with the game's, or another addon's, they are one.
+local function CreateMicroMark()
+    if GuildMicroButton then
+        microMark = CreateFrame("Frame", nil, GuildMicroButton, "MainMenuBarMicroButtonNotificationTemplate")
+        microMark:Hide()
+    end
+end
+
+-- The subtabs' counts and marks and the tabs' marks again, the list left
+-- as it is (OrderList: a notice seen by pointing at its row).
+function GuildTab.UpdateMarks()
+    if page and page:IsShown() then
+        UpdateSubTabs()
+    end
+    UpdateBadge()
+end
+
+-- The marks and the page shown, soon: after the data changes, or the
+-- roster is read.
+function GuildTab.Refresh()
+    ns.Debounce("GuildTabRefresh", 0.3, function()
+        UpdateBadge()
+        RefreshPage()
+    end)
 end
 
 -- Runs after Blizzard lays out its tabs. Ours goes under the lowest one,
@@ -528,10 +626,7 @@ local function Setup()
     tab:SetFrameLevel(TAB_LEVEL)
     tab.Icon:SetTexture(ICON)
     tab.tooltip = L["Recipes & Orders"]
-    tab.Badge = tab:CreateTexture(nil, "OVERLAY")
-    tab.Badge:SetAtlas("communities-icon-notification", true)
-    tab.Badge:SetPoint("CENTER", tab, "TOPRIGHT", 0, 0)
-    tab.Badge:Hide()
+    tab.Badge = GuildTab.NewMark(tab)
     -- After the template's own click (its sound, and marking itself).
     tab:HookScript("OnClick", ShowPage)
     tab:Hide()
@@ -544,16 +639,19 @@ local function Setup()
     communities:HookScript("OnHide", function()
         HidePage(true)
     end)
-    ns.On("DataChanged", function()
-        ns.Debounce("GuildTabRefresh", 0.3, function()
-            UpdateBadge()
-            RefreshPage()
-        end)
-    end)
     Update()
     UpdateBadge()
 end
 
 function GuildTab.Init()
+    -- The micro menu's mark from the start; the tab once the guild window
+    -- is loaded (when first opened).
+    CreateMicroMark()
+    -- Also once the roster is read: at login the guild is not known yet,
+    -- and orders already saved (placed by another character of the
+    -- account, or seen in an earlier session) change nothing on arrival.
+    ns.On("DataChanged", GuildTab.Refresh)
+    ns.On("RosterUpdated", GuildTab.Refresh)
+    UpdateBadge()
     EventUtil.ContinueOnAddOnLoaded("Blizzard_Communities", Setup)
 end

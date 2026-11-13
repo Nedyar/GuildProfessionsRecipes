@@ -7,8 +7,12 @@
 --     creates, modifies, cancels or finishes it;
 --   - a crafter's record holds their answer to it (a): accepted, denied,
 --     materials received or completed, how many items they delivered and
---     how much of the tip they received. Releasing an accepted order
---     removes the answer.
+--     how much of the tip they received. Releasing an accepted order turns
+--     the answer into a refusal stamped with the order's own time (u = ou),
+--     which a real refusal never is (Orders.Deny): the order is released,
+--     and waits for its requester to modify or cancel it. Members on 0.10
+--     and earlier, whose answers know no such state, see a released open
+--     order as pending and a released personal one as denied.
 -- An order with a tip cannot be finished until its crafter has the tip.
 -- Every client works out an order's state from both, in the same way: when
 -- two crafters accept an open order at once, the earlier acceptance wins
@@ -80,10 +84,12 @@ local function AnswersByKey(guild)
 end
 
 -- An order's state, worked out the same way on every client: "pending",
--- "denied", "materials" (accepted, waiting for the requester's materials),
--- "accepted", "completed", "cancelled" or "finished". While it is taken,
--- also returns its crafter's GUID, how many items they delivered and how
--- much of the tip they received.
+-- "denied", "released" (accepted, then given back: it waits for its
+-- requester), "materials" (accepted, waiting for the requester's
+-- materials), "accepted", "completed", "cancelled" or "finished". While it
+-- is taken, also returns its crafter's GUID, how many items they delivered
+-- and how much of the tip they received; released, the GUID of who
+-- released it, fifth.
 function Orders.State(order, requester, answers)
     if order.s == CANCELLED then
         return "cancelled"
@@ -109,16 +115,34 @@ function Orders.State(order, requester, answers)
         end
         return state, crafter, chosen.n or 0, chosen.p or 0
     end
+    -- Refusals of this version: a release (u = ou) by anyone it could be
+    -- for, or the decline of the member it is directed to. When several
+    -- released it, the same one names them everywhere.
+    local releaser, denied
     for _, entry in ipairs(answers or {}) do
-        if entry.guid == order.d and entry.answer.s == DENIED and entry.answer.ou == order.u then
-            return "denied"
+        local answer = entry.answer
+        if answer.s == DENIED and answer.ou == order.u and entry.guid ~= requester
+                and (order.d == nil or entry.guid == order.d) then
+            if answer.u == answer.ou then
+                if not releaser or entry.guid < releaser then
+                    releaser = entry.guid
+                end
+            elseif entry.guid == order.d then
+                denied = true
+            end
         end
+    end
+    if releaser then
+        return "released", nil, nil, nil, releaser
+    elseif denied then
+        return "denied"
     end
     return "pending"
 end
 
 -- Every order of the guild's members, newest first, as views:
--- { key, requester, id, order, state, crafter, delivered, tipPaid }.
+-- { key, requester, id, order, state, crafter, delivered, tipPaid,
+--   releaser }.
 function Orders.List(guild)
     local answers = AnswersByKey(guild)
     local list = {}
@@ -126,9 +150,9 @@ function Orders.List(guild)
         if record.o and Data.IsShareable(record) and Counts(guid, record) and ns.Roster.IsKnownGUID(guid) then
             for id, order in pairs(record.o) do
                 local key = Orders.Key(guid, id)
-                local state, crafter, delivered, tipPaid = Orders.State(order, guid, answers[key])
+                local state, crafter, delivered, tipPaid, releaser = Orders.State(order, guid, answers[key])
                 list[#list + 1] = { key = key, requester = guid, id = id, order = order, state = state,
-                    crafter = crafter, delivered = delivered, tipPaid = tipPaid }
+                    crafter = crafter, delivered = delivered, tipPaid = tipPaid, releaser = releaser }
             end
         end
     end
@@ -312,7 +336,7 @@ end
 -- Our order and its view, while nobody has it: pending or denied.
 local function OwnFree(id)
     local view = Orders.Find(Data.CurrentGuild(false), ns.playerGUID, id)
-    if view and (view.state == "pending" or view.state == "denied") then
+    if view and (view.state == "pending" or view.state == "denied" or view.state == "released") then
         return Data.GetOwnRecord(false), view
     end
 end
@@ -382,14 +406,28 @@ function Orders.Remove(id)
     return true
 end
 
-local function Answer(view, state)
+-- Deletes all our closed orders at once (see Orders.Remove). Returns how
+-- many.
+function Orders.RemoveClosed()
+    local record = Data.GetOwnRecord(false)
+    local count = 0
+    for _, view in ipairs(Orders.Mine(Data.CurrentGuild(false))) do
+        if CLOSED[view.state] then
+            record.o[view.id] = nil
+            count = count + 1
+        end
+    end
+    if count > 0 then
+        Commit(record)
+    end
+    return count
+end
+
+-- Our answer to an order, at time u (now by default).
+local function Answer(view, state, u)
     local record = Data.GetOwnRecord(true)
     record.a = record.a or {}
-    if state then
-        record.a[view.key] = { s = state, u = ns.Now(), ou = view.order.u }
-    else
-        record.a[view.key] = nil
-    end
+    record.a[view.key] = { s = state, u = u or ns.Now(), ou = view.order.u }
     Commit(record)
     return true
 end
@@ -423,7 +461,8 @@ function Orders.Deny(requester, id)
     if not view or view.state ~= "pending" or view.order.d ~= ns.playerGUID then
         return nil, "state"
     end
-    return Answer(view, DENIED)
+    -- Never at the order's own time, which would make it a release.
+    return Answer(view, DENIED, math.max(ns.Now(), view.order.u + 1))
 end
 
 -- Marks the materials of an order we accepted as received.
@@ -490,13 +529,14 @@ function Orders.ConfirmTip(requester, id)
     return true
 end
 
--- Gives back an order we accepted: it is pending again.
+-- Gives back an order we accepted: it is released, and waits for its
+-- requester to modify or cancel it (see the top of this file).
 function Orders.Release(requester, id)
     local view = OwnTaken(requester, id, WORKING)
     if not view then
         return nil, "state"
     end
-    return Answer(view, nil)
+    return Answer(view, DENIED, view.order.u)
 end
 
 -- Clean-up ------------------------------------------------------------------------
