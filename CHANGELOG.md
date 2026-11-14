@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.11.1 - A narrower Professions column
+
+- **The roster's Professions column is narrower**, about 86 pixels instead of 116: it has room for five icons, as many professions as a character has in WoW Forever (two primary professions, First Aid, Fishing and Cooking). The Note column next to it gets the space back.
+
 ## 0.11.0 - Marks, released orders and the materials list
 
 - **Notification marks, as the game shows them.** While an order waits for you, a mark shows on the micro menu's Guild & Communities button, on the Recipes & Orders tab, on the subtab that lists it and on the order's icon. Once one of your orders is accepted, it is marked until you point at it. Changes made while you were away, or by another of your characters, are marked and told in the chat at login too.

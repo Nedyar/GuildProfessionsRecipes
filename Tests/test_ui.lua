@@ -89,6 +89,22 @@ silentHolder = HolderOf(silentRow)
 H.check(silentHolder and silentHolder.icons[1]._shown and silentHolder.icons[1].prof.native, "the roster's own profession data is shown when given")
 silentHolder.icons[1]._scripts.OnEnter(silentHolder.icons[1])
 H.check(list.headers[6]._lastPoint ~= nil, "the Note header is shortened")
+-- Room for five icons, as many professions as a character has in WoW
+-- Forever (two primary ones, First Aid, Fishing and Cooking); the header
+-- as wide: 5 x 14 px icons, 1 px apart, and 12 px of padding.
+H.eq(#holder.icons, 5, "room for five icons, a character's professions at most")
+local professionsHeader
+for _, frame in ipairs(ChildrenOf(A, list.ColumnDisplay)) do
+    if frame._text == "Professions" then
+        professionsHeader = frame
+    end
+end
+local headerWidth
+rawset(professionsHeader, "SetWidth", function(_, width)
+    headerWidth = width
+end)
+list:RefreshLayout()
+H.eq(headerWidth, 86, "the Professions header is 86 px wide")
 
 -- Blizzard's extra column fills the right end: the icons take the Note's place.
 aliceRow.guildColumnIndex = 1

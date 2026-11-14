@@ -16,7 +16,9 @@ ns.RosterColumn = RosterColumn
 
 local ICON_SIZE = 14
 local ICON_GAP = 1
-local MAX_ICONS = 7
+-- As many professions as a character has in WoW Forever: two primary ones,
+-- First Aid, Fishing and Cooking (GetProfessions gives five).
+local MAX_ICONS = 5
 local HOLDER_WIDTH = MAX_ICONS * (ICON_SIZE + ICON_GAP) - ICON_GAP
 local RIGHT_PADDING = 4
 local FACTION_PADDING = 24  -- room for the faction icon of cross-faction members
