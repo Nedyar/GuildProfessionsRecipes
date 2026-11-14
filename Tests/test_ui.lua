@@ -105,6 +105,21 @@ rawset(professionsHeader, "SetWidth", function(_, width)
 end)
 list:RefreshLayout()
 H.eq(headerWidth, 86, "the Professions header is 86 px wide")
+-- The header ends 28 px in from the right edge of the column headers and a
+-- row 22 px in (measured in game): from that edge, the icons sit centred
+-- under the header, and the Note ends where the header begins, as
+-- Blizzard's own texts end at the next column.
+local noteOffset
+rawset(aliceRow.Note, "SetPoint", function(self, point, relative, relativePoint, x)
+    self._right, noteOffset = relative, x
+end)
+aliceRow:RefreshExpandedColumns()
+local headerRight = professionsHeader._point[4]
+local iconsRight = -22 + holder._point[4]
+local iconsWidth = #holder.icons * 15 - 1
+H.eq(holder._point[2], aliceRow, "the icons are placed from the row's right edge")
+H.eq(iconsRight - iconsWidth / 2, headerRight - headerWidth / 2, "the icons sit centred under the Professions header")
+H.eq(iconsRight - iconsWidth + noteOffset, headerRight - headerWidth, "the Note ends where the Professions header begins")
 
 -- Blizzard's extra column fills the right end: the icons take the Note's place.
 aliceRow.guildColumnIndex = 1

@@ -20,7 +20,15 @@ local ICON_GAP = 1
 -- First Aid, Fishing and Cooking (GetProfessions gives five).
 local MAX_ICONS = 5
 local HOLDER_WIDTH = MAX_ICONS * (ICON_SIZE + ICON_GAP) - ICON_GAP
-local RIGHT_PADDING = 4
+-- Our header: the icons' width and a margin on each side.
+local HEADER_MARGIN = 6
+local HEADER_WIDTH = HOLDER_WIDTH + 2 * HEADER_MARGIN
+-- The header ends by the scroll bar, 28 px in from the right edge of the
+-- column headers. The rows reach 6 px further right (measured in game), so
+-- the icons end 6 px more in from a row's right edge, centred under it.
+local HEADER_RIGHT = 28
+local ICONS_RIGHT = 6 + HEADER_MARGIN
+local NOTE_RIGHT = 4        -- Blizzard's own, without our column
 local FACTION_PADDING = 24  -- room for the faction icon of cross-faction members
 
 local memberList
@@ -129,7 +137,7 @@ local function UpdateRow(row)
             holder:Hide()
             if holder.noteMoved and row.guildColumnIndex == nil then
                 -- Back to Blizzard's own layout for a roster without an extra column.
-                row.Note:SetPoint("RIGHT", row, "RIGHT", -RIGHT_PADDING, 0)
+                row.Note:SetPoint("RIGHT", row, "RIGHT", -NOTE_RIGHT, 0)
                 holder.noteMoved = false
             end
         end
@@ -142,9 +150,11 @@ local function UpdateRow(row)
         holder:SetPoint("LEFT", row.Rank, "RIGHT", 8, 0)
         row.Note:Hide()
     else
-        local padding = (row.FactionButton and row.FactionButton:IsShown()) and FACTION_PADDING or RIGHT_PADDING
+        local padding = (row.FactionButton and row.FactionButton:IsShown()) and FACTION_PADDING or ICONS_RIGHT
         holder:SetPoint("RIGHT", row, "RIGHT", -padding, 0)
-        row.Note:SetPoint("RIGHT", holder, "LEFT", -4, 0)
+        -- The Note ends where our header begins, as Blizzard's own texts end
+        -- at the next column.
+        row.Note:SetPoint("RIGHT", holder, "LEFT", -HEADER_MARGIN, 0)
         holder.noteMoved = true
     end
 
@@ -186,8 +196,8 @@ local function UpdateHeader(list)
     end
     if not header then
         header = CreateFrame("Button", nil, columns, "ColumnDisplayButtonNoScriptsTemplate")
-        header:SetWidth(HOLDER_WIDTH + 2 * RIGHT_PADDING + 4)
-        header:SetPoint("BOTTOMRIGHT", columns, "BOTTOMRIGHT", -28, 1)
+        header:SetWidth(HEADER_WIDTH)
+        header:SetPoint("BOTTOMRIGHT", columns, "BOTTOMRIGHT", -HEADER_RIGHT, 1)
         header:SetScript("OnEnter", function(self)
             GameTooltip:SetOwner(self, "ANCHOR_TOP")
             GameTooltip:SetText(L["Professions"], 1, 1, 1)
@@ -212,7 +222,7 @@ local function UpdateHeader(list)
     end
     header:ClearAllPoints()
     if not note then
-        header:SetPoint("BOTTOMRIGHT", columns, "BOTTOMRIGHT", -28, 1)
+        header:SetPoint("BOTTOMRIGHT", columns, "BOTTOMRIGHT", -HEADER_RIGHT, 1)
     elseif list:GetGuildColumnIndex() ~= nil then
         -- An extra column is shown: our header takes the Note header's place.
         header:SetPoint("BOTTOMLEFT", note, "BOTTOMLEFT")
@@ -221,8 +231,8 @@ local function UpdateHeader(list)
     else
         -- The Note header stretches to the right edge; it now stops where
         -- ours begins.
-        header:SetWidth(HOLDER_WIDTH + 2 * RIGHT_PADDING + 4)
-        header:SetPoint("BOTTOMRIGHT", columns, "BOTTOMRIGHT", -28, 1)
+        header:SetWidth(HEADER_WIDTH)
+        header:SetPoint("BOTTOMRIGHT", columns, "BOTTOMRIGHT", -HEADER_RIGHT, 1)
         note:SetPoint("BOTTOMRIGHT", header, "BOTTOMLEFT", 2, 0)
     end
 end

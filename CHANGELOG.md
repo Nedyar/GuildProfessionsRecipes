@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.11.2 - The Professions column lined up
+
+- **The profession icons sit centred under the roster's Professions header.** They were drawn a few pixels to the right of it.
+- **A long note no longer runs into the Professions column.** It is cut where the column begins, as the game cuts the texts of its own columns.
+
 ## 0.11.1 - A narrower Professions column
 
 - **The roster's Professions column is narrower**, about 86 pixels instead of 116: it has room for five icons, as many professions as a character has in WoW Forever (two primary professions, First Aid, Fishing and Cooking). The Note column next to it gets the space back.
